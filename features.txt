@@ -1,0 +1,30 @@
+Possible features
+
+date
+batter id
+pitcher id
+stand (b L/r)
+p_throws (p l/r)
+batting team (need to encode)
+pitching team (need to encode)
+balls 
+strikes
+bases
+on_3b … on_1b (converted to indicator)
+inning
+inning_topbot
+at_bat_number
+pitch_number
+bat_score
+pit_score
+pitch_name
+if_fielding_alignment
+of_fielding_alignment
+
+
+
+label options
+
+events
+wOBA_value
+run_expectancy
