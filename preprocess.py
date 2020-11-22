@@ -27,9 +27,15 @@ def get_data(data_file):
     # convert each list of data representing a column to an np array
 
     # there are 11 pitch types to encode to (plus nulls, which we filter out later)
+    # changing these pitch type strings into numbers 
+    # Question: will the model try to learn relationships between numbers. I.e the fact that 1 is closer 
+    # to 3 than 8 is? 
+    
     pitchTypesList = ['CH', 'CS', 'CU', 'FC', 'FF', 'FO', 'FS', 'KC', 'KN', 'SI', 'SL']
+    # we chose to not work with a 0 index for this list 
     counter = 1
     pitch_types = np.array(data_dict['pitch_type'])
+    #where you turn the strings into the corresponding numbers 
     for pitch in pitchTypesList:
         pitch_types = np.where(pitch_types == pitch, counter, pitch_types)
         counter += 1
@@ -37,18 +43,28 @@ def get_data(data_file):
     pitcher_ids = np.array(data_dict['pitcher'])
     # TODO: encode play_outcomes 1-19 similar to how we did pitch_types
     play_outcomes = np.array(data_dict['events'])
+    playEventsList =  ['double', 'double_play', 'field_error', 'field_out', 'fielders_choice', 'fielders_choice_out', 'force_out',
+    'grounded_into_double_play', 'hit_by_pitch', 'home_run', 'sac_bunt', 'sac_fly', 'sac_fly_double_play', 'single', 
+    'strikeout', 'strikeout_double_play', 'triple', 'triple_play', 'walk']
+    counter = 1
+    for event in playEventsList:
+        play_outcomes = np.where(play_outcomes == event, counter, play_outcomes)
+        counter += 1
+    print(play_outcomes, "this is play outcomes")
     # batter stance encoded as L = 1, R = 2
     batter_stance = np.array(data_dict['stand'])
     batter_stance = np.where(batter_stance == 'L', 1, 2)
     # pitcher handedness similarly encoded as L = 1, R = 2
     pitcher_handedness = np.array(data_dict['p_throws'])
     pitcher_handedness = np.where(pitcher_handedness == 'L', 1, 2)
-    # TODO: what are we using this home and away team for again?
+    # TODO: what are we using this home and away team for again? @john
     home_team = np.array(data_dict['home_team'])
     away_team = np.array(data_dict['away_team'])
     balls = np.array(data_dict['balls'])
+    # number of strikes that person at bat has 
     strikes = np.array(data_dict['strikes'])
     # on base has player IDs for who is on base, but null for if nobody is on base, so encode null to -1
+    # is -1 one a good choice or is 0 a good choice? 
     on_3b = np.array(data_dict['on_3b'])
     on_3b = np.where(on_3b == 'null', -1, on_3b)
     on_2b = np.array(data_dict['on_2b'])
@@ -95,7 +111,11 @@ def get_data(data_file):
     data_minus_nulls = np.delete(data_minus_nulls, 20, axis=1)
     # TODO there may be some type issues here with blanket casting to float 32, examine and make sure it's fine
     # cast encoded data to float32
-    data_final = data_minus_nulls.astype(np.float32)
-    pass
+    # data_final = data_minus_nulls.astype(np.float32)
+    print(data_minus_nulls, "data_minus_nulls")
+    print(labels, 'labels')
+    labels = labels.astype(np.float32)
+    print(labels, 'labels')
+    return data_minus_nulls, labels 
 
 get_data('full_2020_data.csv')
