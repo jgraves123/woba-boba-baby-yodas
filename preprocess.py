@@ -25,57 +25,52 @@ def get_data(data_file):
             data_dict[col].append(row[col])
 
     # convert each list of data representing a column to an np array
-    # TODO: encode pitch_types 1-11
+
+    # there are 11 pitch types to encode to (plus nulls, which we filter out later)
+    pitchTypesList = ['CH', 'CS', 'CU', 'FC', 'FF', 'FO', 'FS', 'KC', 'KN', 'SI', 'SL']
+    counter = 1
     pitch_types = np.array(data_dict['pitch_type'])
-
-    batter_ids = np.array(data_dict['batter'], dtype=np.int32)
-    pitcher_ids = np.array(data_dict['pitcher'], dtype=np.int32)
-
-    # TODO: encode play_outcomes 1-19
+    for pitch in pitchTypesList:
+        pitch_types = np.where(pitch_types == pitch, counter, pitch_types)
+        counter += 1
+    batter_ids = np.array(data_dict['batter'])
+    pitcher_ids = np.array(data_dict['pitcher'])
+    # TODO: encode play_outcomes 1-19 similar to how we did pitch_types
     play_outcomes = np.array(data_dict['events'])
-
     # batter stance encoded as L = 1, R = 2
     batter_stance = np.array(data_dict['stand'])
     batter_stance = np.where(batter_stance == 'L', 1, 2)
     # pitcher handedness similarly encoded as L = 1, R = 2
     pitcher_handedness = np.array(data_dict['p_throws'])
     pitcher_handedness = np.where(pitcher_handedness == 'L', 1, 2)
-
     # TODO: what are we using this home and away team for again?
     home_team = np.array(data_dict['home_team'])
     away_team = np.array(data_dict['away_team'])
-    balls = np.array(data_dict['balls'], dtype=np.int32)
-    strikes = np.array(data_dict['strikes'], dtype=np.int32)
-
+    balls = np.array(data_dict['balls'])
+    strikes = np.array(data_dict['strikes'])
     # on base has player IDs for who is on base, but null for if nobody is on base, so encode null to -1
     on_3b = np.array(data_dict['on_3b'])
     on_3b = np.where(on_3b == 'null', -1, on_3b)
-    on_2b = np.array(data_dict['on_2b']) #''
+    on_2b = np.array(data_dict['on_2b'])
     on_2b = np.where(on_3b == 'null', -1, on_2b)
-    on_1b = np.array(data_dict['on_1b']) #''
+    on_1b = np.array(data_dict['on_1b'])
     on_1b = np.where(on_3b == 'null', -1, on_1b)
-
-    outs = np.array(data_dict['outs_when_up'], dtype= np.int32)
-    innings = np.array(data_dict['inning'], dtype=np.int32)
-
+    outs = np.array(data_dict['outs_when_up'])
+    innings = np.array(data_dict['inning'])
     # TODO how are we using this with home and away team
     innings_top_or_bot = np.array(data_dict['inning_topbot']) # ask john
-
-    batting_team_score = np.array(data_dict['bat_score'], dtype=np.int32)
-    pitching_team_score = np.array(data_dict['fld_score'], dtype=np.int32)
-
+    batting_team_score = np.array(data_dict['bat_score'])
+    pitching_team_score = np.array(data_dict['fld_score'])
     # encoded as "Standard" = 1, "Strategic" = 2, "Infield shift" = 3
     infield_shifts = np.array(data_dict['if_fielding_alignment'])
     infield_shifts = np.where(infield_shifts == 'Standard', 1, infield_shifts)
     infield_shifts = np.where(infield_shifts == 'Strategic', 2, infield_shifts)
     infield_shifts = np.where(infield_shifts == 'Infield shift', 3, infield_shifts)
-
     # encoded as "Standard" = 1, "Strategic" = 2, "4th outfielder" = 3
     outfield_shifts = np.array(data_dict['of_fielding_alignment'])
     outfield_shifts = np.where(outfield_shifts == 'Standard', 1, outfield_shifts)
     outfield_shifts = np.where(outfield_shifts == 'Strategic', 2, outfield_shifts)
     outfield_shifts = np.where(outfield_shifts == '4th outfielder', 3, outfield_shifts)
-
     # wobas is the labels
     wobas = np.array(data_dict['woba_value'])
 
@@ -85,7 +80,8 @@ def get_data(data_file):
                                   batting_team_score, pitching_team_score, infield_shifts, outfield_shifts, wobas))
 
     # get rows that have null values that can't be encoded/ would lead to model confusion
-    # pitch_types has some null values (column 0), infield shift (column 18), and outfield_shift (column 19)
+    # pitch_types (column 0), infield shift (column 18), and outfield_shift (column 19) all have entries will null
+    # data that we cannot use/encode to be meaningful data
     rows_to_delete = []
     for row_num in range(data_whole.shape[0]):
         if data_whole[row_num][0] == 'null' or data_whole[row_num][18] == 'null' or data_whole[row_num][19] == 'null':
@@ -97,6 +93,9 @@ def get_data(data_file):
     # separate out labels from data and remove the labels from the last column of the data array
     labels = data_minus_nulls[:, 20]
     data_minus_nulls = np.delete(data_minus_nulls, 20, axis=1)
+    # TODO there may be some type issues here with blanket casting to float 32, examine and make sure it's fine
+    # cast encoded data to float32
+    data_final = data_minus_nulls.astype(np.float32)
     pass
 
 get_data('full_2020_data.csv')
