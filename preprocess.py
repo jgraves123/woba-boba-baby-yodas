@@ -17,12 +17,15 @@ def get_data(data_file):
     # initialize empty lists in dictionary to add to, where keys are column titles
     for col in columns_we_want:
         data_dict[col] = []
-    # read the CSV file and append each piece of data that we want from relevant columns to dictionary's relevant value
+                # read the CSV file and append each piece of data that we want from relevant columns to dictionary's relevant value
     # list
     csv_reader = csv.DictReader(open(data_file))
     for row in csv_reader:
         for col in columns_we_want:
             data_dict[col].append(row[col])
+    for col in columns_we_want:
+        data_dict[col] = np.array(data_dict[col])
+
 
     # convert each list of data representing a column to an np array
 
@@ -31,16 +34,13 @@ def get_data(data_file):
     # Question: will the model try to learn relationships between numbers. I.e the fact that 1 is closer 
     # to 3 than 8 is? 
     
-    pitchTypesList = ['CH', 'CS', 'CU', 'FC', 'FF', 'FO', 'FS', 'KC', 'KN', 'SI', 'SL']
-    # we chose to not work with a 0 index for this list 
-    counter = 1
-    pitch_types = np.array(data_dict['pitch_type'])
-    #where you turn the strings into the corresponding numbers 
-    for pitch in pitchTypesList:
-        pitch_types = np.where(pitch_types == pitch, counter, pitch_types)
-        counter += 1
-    batter_ids = np.array(data_dict['batter'])
-    pitcher_ids = np.array(data_dict['pitcher'])
+   
+    data_dict['pitch_type'] = build_ids(data_dict['pitch_type'])
+    data_dict['batter_ids'] = build_ids(data_dict['batter'])
+    # pitcher_ids = np.array(data_dict['pitcher'])
+    print(data_dict['pitcher_ids'], " pitcher_ids before")
+    data_dict['pitcher_ids'] = build_ids(data_dict['pitcher_ids'])
+    print(data_dict['pitcher_ids'], ' pitcher_ids after')
     # TODO: encode play_outcomes 1-19 similar to how we did pitch_types
     play_outcomes = np.array(data_dict['events'])
     playEventsList =  ['double', 'double_play', 'field_error', 'field_out', 'fielders_choice', 'fielders_choice_out', 'force_out',
@@ -65,6 +65,7 @@ def get_data(data_file):
     strikes = np.array(data_dict['strikes'])
     # on base has player IDs for who is on base, but null for if nobody is on base, so encode null to -1
     # is -1 one a good choice or is 0 a good choice? 
+    # we might want to have indicator of if someone is one base instead of who is on base 
     on_3b = np.array(data_dict['on_3b'])
     on_3b = np.where(on_3b == 'null', -1, on_3b)
     on_2b = np.array(data_dict['on_2b'])
@@ -112,10 +113,32 @@ def get_data(data_file):
     # TODO there may be some type issues here with blanket casting to float 32, examine and make sure it's fine
     # cast encoded data to float32
     # data_final = data_minus_nulls.astype(np.float32)
-    print(data_minus_nulls, "data_minus_nulls")
-    print(labels, 'labels')
+    # print(data_minus_nulls, "data_minus_nulls")
+    # print(labels, 'labels')
     labels = labels.astype(np.float32)
-    print(labels, 'labels')
+    # print(labels, 'labels')
     return data_minus_nulls, labels 
+
+def build_ids(column_data):
+    # tokens = []
+    # for s in sentences:
+    #     tokens.extend(s)
+    # all_words = sorted(list(set([STOP_TOKEN, PAD_TOKEN, UNK_TOKEN] + tokens)))
+
+    # vocab = {word: i for i, word in enumerate(all_words)}
+
+    # return vocab, vocab[PAD_TOKEN]
+    'param: column_data is the data from one column in the data_dict dictionary in get_data'
+    unique_values_list = np.unique(column_data)
+    counter = 0
+    for option in unique_values_list:
+        column_data = np.where(column_data == option, counter, column_data)
+        counter += 1
+    # print(column_data, " this is column data in the function")
+    return column_data
+
+
+
+
 
 get_data('full_2020_data.csv')
