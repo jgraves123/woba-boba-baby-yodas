@@ -26,6 +26,8 @@ def get_data(data_file):
     for col in columns_we_want:
         data_dict[col] = np.array(data_dict[col])
 
+    print("Done Creating Columns")
+
 
     # convert each list of data representing a column to an np array
 
@@ -36,87 +38,65 @@ def get_data(data_file):
     
    
     data_dict['pitch_type'] = build_ids(data_dict['pitch_type'])
-    data_dict['batter_ids'] = build_ids(data_dict['batter'])
-    # pitcher_ids = np.array(data_dict['pitcher'])
-    print(data_dict['pitcher_ids'], " pitcher_ids before")
-    data_dict['pitcher_ids'] = build_ids(data_dict['pitcher_ids'])
-    print(data_dict['pitcher_ids'], ' pitcher_ids after')
-    # TODO: encode play_outcomes 1-19 similar to how we did pitch_types
-    play_outcomes = np.array(data_dict['events'])
-    playEventsList =  ['double', 'double_play', 'field_error', 'field_out', 'fielders_choice', 'fielders_choice_out', 'force_out',
-    'grounded_into_double_play', 'hit_by_pitch', 'home_run', 'sac_bunt', 'sac_fly', 'sac_fly_double_play', 'single', 
-    'strikeout', 'strikeout_double_play', 'triple', 'triple_play', 'walk']
-    counter = 1
-    for event in playEventsList:
-        play_outcomes = np.where(play_outcomes == event, counter, play_outcomes)
-        counter += 1
-    print(play_outcomes, "this is play outcomes")
-    # batter stance encoded as L = 1, R = 2
-    batter_stance = np.array(data_dict['stand'])
-    batter_stance = np.where(batter_stance == 'L', 1, 2)
-    # pitcher handedness similarly encoded as L = 1, R = 2
-    pitcher_handedness = np.array(data_dict['p_throws'])
-    pitcher_handedness = np.where(pitcher_handedness == 'L', 1, 2)
+    data_dict['batter'] = build_ids(data_dict['batter'])
+    print(data_dict['pitcher'], " pitcher_ids before")
+    data_dict['pitcher'] = build_ids(data_dict['pitcher'])
+    print(data_dict['pitcher'], ' pitcher_ids after')
+    data_dict['events'] = build_ids((data_dict['events']))
+    # batter stance encoded as L = 0, R = 1
+    data_dict['stand'] = np.where(data_dict['stand'] == 'L', 0, 1)
+    # pitcher throws encoded as L = 0, R = 1
+    data_dict['p_throws'] = np.where(data_dict['p_throws'] == 'L', 0, 1)
     # TODO: what are we using this home and away team for again? @john
-    home_team = np.array(data_dict['home_team'])
-    away_team = np.array(data_dict['away_team'])
-    balls = np.array(data_dict['balls'])
-    # number of strikes that person at bat has 
-    strikes = np.array(data_dict['strikes'])
+
+    data_dict['away_team'], data_dict['home_team'] = field_team(data_dict['inning_topbot'], data_dict['home_team'], data_dict['away_team'])
+    # away_team = fielding team
+    data_dict['away_team'] = build_ids(data_dict['away_team'])
+    data_dict['home_team'] = build_ids(data_dict['home_team'])
+    data_dict['inning_topbot'] = build_ids(data_dict['inning_topbot'])
+
     # on base has player IDs for who is on base, but null for if nobody is on base, so encode null to -1
     # is -1 one a good choice or is 0 a good choice? 
-    # we might want to have indicator of if someone is one base instead of who is on base 
-    on_3b = np.array(data_dict['on_3b'])
-    on_3b = np.where(on_3b == 'null', -1, on_3b)
-    on_2b = np.array(data_dict['on_2b'])
-    on_2b = np.where(on_3b == 'null', -1, on_2b)
-    on_1b = np.array(data_dict['on_1b'])
-    on_1b = np.where(on_3b == 'null', -1, on_1b)
-    outs = np.array(data_dict['outs_when_up'])
-    innings = np.array(data_dict['inning'])
-    # TODO how are we using this with home and away team
-    innings_top_or_bot = np.array(data_dict['inning_topbot']) # ask john
-    batting_team_score = np.array(data_dict['bat_score'])
-    pitching_team_score = np.array(data_dict['fld_score'])
+    # we might want to have indicator of if someone is one base instead of who is on base
+    data_dict['on_3b'] = np.where(data_dict['on_3b'] == 'null', 0, 1)
+    data_dict['on_2b'] = np.where(data_dict['on_2b'] == 'null', 0, 1)
+    data_dict['on_1b'] = np.where(data_dict['on_1b'] == 'null', 0, 1)
+    # bat_score = difference between scores
+    data_dict['bat_score'] = data_dict['bat_score'].astype(np.int32) - data_dict['fld_score'].astype(np.int32)
     # encoded as "Standard" = 1, "Strategic" = 2, "Infield shift" = 3
-    infield_shifts = np.array(data_dict['if_fielding_alignment'])
-    infield_shifts = np.where(infield_shifts == 'Standard', 1, infield_shifts)
-    infield_shifts = np.where(infield_shifts == 'Strategic', 2, infield_shifts)
-    infield_shifts = np.where(infield_shifts == 'Infield shift', 3, infield_shifts)
+    data_dict['if_fielding_alignment'] = build_ids(data_dict['if_fielding_alignment'])
     # encoded as "Standard" = 1, "Strategic" = 2, "4th outfielder" = 3
-    outfield_shifts = np.array(data_dict['of_fielding_alignment'])
-    outfield_shifts = np.where(outfield_shifts == 'Standard', 1, outfield_shifts)
-    outfield_shifts = np.where(outfield_shifts == 'Strategic', 2, outfield_shifts)
-    outfield_shifts = np.where(outfield_shifts == '4th outfielder', 3, outfield_shifts)
+    data_dict['of_fielding_alignment'] = build_ids(data_dict['of_fielding_alignment'])
     # wobas is the labels
-    wobas = np.array(data_dict['woba_value'])
+
+    print("Stacking columns ...")
 
     # stack all the data to one massive array
-    data_whole = np.column_stack((pitch_types, batter_ids, pitcher_ids, play_outcomes, batter_stance, pitcher_handedness,
-                                  home_team, away_team, balls, strikes, on_3b, on_2b, on_1b, outs, innings, innings_top_or_bot,
-                                  batting_team_score, pitching_team_score, infield_shifts, outfield_shifts, wobas))
+    data_whole = np.column_stack((data_dict['pitch_type'], data_dict['batter'], data_dict['pitcher'], data_dict['events'],
+                                  data_dict['stand'], data_dict['p_throws'], data_dict['home_team'], data_dict['away_team'],
+                                  data_dict['balls'], data_dict['strikes'], data_dict['on_3b'], data_dict['on_2b'],
+                                  data_dict['on_1b'], data_dict['outs_when_up'], data_dict['inning'], data_dict['inning_topbot'],
+                                  data_dict['woba_value'], data_dict['bat_score'], data_dict['fld_score'],
+                                  data_dict['if_fielding_alignment'], data_dict['of_fielding_alignment']))
 
     # get rows that have null values that can't be encoded/ would lead to model confusion
     # pitch_types (column 0), infield shift (column 18), and outfield_shift (column 19) all have entries will null
     # data that we cannot use/encode to be meaningful data
+
+    print("Deleting Rows...")
     rows_to_delete = []
     for row_num in range(data_whole.shape[0]):
-        if data_whole[row_num][0] == 'null' or data_whole[row_num][18] == 'null' or data_whole[row_num][19] == 'null':
+        if data_whole[row_num][0] == 'null' or data_whole[row_num][19] == 'null' or data_whole[row_num][20] == 'null':
             rows_to_delete.append(row_num)
 
     # delete rows that have null values we want to remove
     data_minus_nulls = np.delete(data_whole, rows_to_delete, axis=0)
 
     # separate out labels from data and remove the labels from the last column of the data array
-    labels = data_minus_nulls[:, 20]
-    data_minus_nulls = np.delete(data_minus_nulls, 20, axis=1)
-    # TODO there may be some type issues here with blanket casting to float 32, examine and make sure it's fine
-    # cast encoded data to float32
-    # data_final = data_minus_nulls.astype(np.float32)
-    # print(data_minus_nulls, "data_minus_nulls")
-    # print(labels, 'labels')
-    labels = labels.astype(np.float32)
-    # print(labels, 'labels')
+    labels = (data_minus_nulls[:, 16].astype(np.float32), data_minus_nulls[:, 3].astype(np.float32))
+    data_minus_nulls = np.delete(data_minus_nulls, [16, 3, 15], axis=1).astype(np.int32)
+
+    print("Done Preprocessing!")
     return data_minus_nulls, labels 
 
 def build_ids(column_data):
@@ -132,12 +112,18 @@ def build_ids(column_data):
     unique_values_list = np.unique(column_data)
     counter = 0
     for option in unique_values_list:
-        column_data = np.where(column_data == option, counter, column_data)
-        counter += 1
+        if option != "null":
+            column_data = np.where(column_data == option, counter, column_data)
+            counter += 1
     # print(column_data, " this is column data in the function")
     return column_data
 
-
+def field_team(top_bot, home, away):
+    field = np.asarray(top_bot)
+    hit = np.asarray(top_bot)
+    field = np.where(top_bot == 'Top', home, away)
+    hit = np.where(top_bot == 'Bot', away, home)
+    return field, hit
 
 
 

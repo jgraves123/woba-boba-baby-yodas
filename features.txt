@@ -1,17 +1,17 @@
 Possible features
 
-date
-batter id
-pitcher id
-stand (b L/r)
-p_throws (p l/r)
-batting team (need to encode)
-pitching team (need to encode)
+date (to int)
+batter id (to int 0 - length)
+pitcher id (to int 0 - length))
+stand (b L/r)  (indicator)
+p_throws (p l/r) (indicator)
+batting team (need to encode) (to int 0 -29)
+pitching team (need to encode) (to int 0 -29)
 balls 
 strikes
 bases
 on_3b … on_1b (converted to indicator)
-inning
+inning (indicators?)
 inning_topbot
 at_bat_number
 pitch_number
