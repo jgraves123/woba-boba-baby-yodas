@@ -10,9 +10,9 @@ def get_data(data_file):
     """
     data_dict = {}
     # column titles in the CSV we want to use
-    columns_we_want = ['pitch_type', 'batter', 'pitcher', 'events', 'stand', 'p_throws', 'home_team', 'away_team',
+    columns_we_want = np.array(['pitch_type', 'batter', 'pitcher', 'events', 'stand', 'p_throws', 'home_team', 'away_team',
                        'balls', 'strikes', 'on_3b', 'on_2b', 'on_1b', 'outs_when_up', 'inning', 'inning_topbot',
-                       'woba_value', 'bat_score', 'fld_score', 'if_fielding_alignment', 'of_fielding_alignment']
+                       'woba_value', 'bat_score', 'fld_score', 'if_fielding_alignment', 'of_fielding_alignment'])
 
     # initialize empty lists in dictionary to add to, where keys are column titles
     for col in columns_we_want:
@@ -62,6 +62,8 @@ def get_data(data_file):
 
     print("Stacking columns ...")
 
+
+
     # stack all the data to one massive array
     data_whole = np.column_stack((data_dict['pitch_type'], data_dict['batter'], data_dict['pitcher'],
                                   data_dict['events'], data_dict['stand'], data_dict['p_throws'],
@@ -88,10 +90,23 @@ def get_data(data_file):
     # want to use it at the current moment
     labels = (data_minus_nulls[:, 16].astype(np.float32), data_minus_nulls[:, 3].astype(np.float32))
     data_minus_nulls = np.delete(data_minus_nulls, [16, 3, 15], axis=1).astype(np.int32)
+    update_columns = np.delete(columns_we_want, [16, 3, 15], axis=0)
+
+    # max dict is a dictionary between column name and index of column
+    index_dict = {}
+    for i, e in enumerate(update_columns):
+        index_dict[e] = i
+
+    # max dict is a dictionary between column name and number of unique values
+    max_dict = {}
+    for i, e in enumerate(update_columns):
+        max_dict[e] = np.argmax(data_minus_nulls[:, i]) + 1
+
+
 
     print("Done Preprocessing!")
 
-    return data_minus_nulls, labels 
+    return data_minus_nulls, labels, index_dict, max_dict
 
 
 def build_ids(column_data):
@@ -126,6 +141,7 @@ def field_team(top_bot, home, away):
     field = np.where(top_bot == 'Top', home, away)
     hit = np.where(top_bot == 'Bot', away, home)
     return field, hit
+
 
 
 get_data('full_2020_data.csv')
