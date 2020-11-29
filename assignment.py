@@ -113,7 +113,7 @@ def main():
     model = Model(data, index_dict, max_dict)
     print("Model Initialized...")
     model.call(data)
-    print("Model.call done")
+    print("Model.call finished")
 
     # TODO: make test, train -> maybe in preprocess?
 

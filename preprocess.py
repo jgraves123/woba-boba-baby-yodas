@@ -89,7 +89,7 @@ def get_data(data_file):
     data_minus_nulls = np.delete(data_minus_nulls, [16, 3, 15], axis=1).astype(np.int32)
     update_columns = np.delete(columns_we_want, [16, 3, 15], axis=0)
 
-    # index dict is a dictionary between column name and index of column
+    # index dict is a dictionary between column name and index number of column
     index_dict = {}
     for i, e in enumerate(update_columns):
         index_dict[e] = i
