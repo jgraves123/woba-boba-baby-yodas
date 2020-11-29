@@ -33,7 +33,7 @@ def get_data(data_file):
     data_dict['pitch_type'] = build_ids(data_dict['pitch_type'])
     data_dict['batter'] = build_ids(data_dict['batter'])
     data_dict['pitcher'] = build_ids(data_dict['pitcher'])
-    data_dict['events'] = build_ids((data_dict['events']))
+    data_dict['events'], labels_dictionary = build_labels((data_dict['events']))
     data_dict['if_fielding_alignment'] = build_ids(data_dict['if_fielding_alignment'])
     data_dict['of_fielding_alignment'] = build_ids(data_dict['of_fielding_alignment'])
 
@@ -86,6 +86,10 @@ def get_data(data_file):
     # separate out labels from data and remove the labels from the data array, also remove inning_topbot since we don't
     # want to use it at the current moment
     labels = (data_minus_nulls[:, 16].astype(np.float32), data_minus_nulls[:, 3].astype(np.float32))
+    # print(labels.shape, " labels shape before concat")
+    labels = np.column_stack(labels)
+    print(labels.shape, " labels shape")
+
     data_minus_nulls = np.delete(data_minus_nulls, [16, 3, 15], axis=1).astype(np.int32)
     update_columns = np.delete(columns_we_want, [16, 3, 15], axis=0)
 
@@ -100,9 +104,21 @@ def get_data(data_file):
     for i, e in enumerate(update_columns):
         max_dict[e] = np.amax(data_minus_nulls[:, i]) + 1
 
+    shuffle = np.arange(data_minus_nulls.shape[0])
+    np.random.shuffle(shuffle)
+    shuffled_data = np.take(data_minus_nulls, shuffle, axis=0)
+    print(shuffled_data.shape, " shuffled_data shape")
+    shuffled_labels = np.take(labels, shuffle, axis=0)
+
+    data_training = shuffled_data[0:int(shuffled_data.shape[0]*0.9), :]
+    data_testing = shuffled_data[int(shuffled_data.shape[0]*0.9): , :]
+    labels_training = shuffled_labels[0:int(shuffled_labels.shape[0]*0.9), :]
+    labels_testing = shuffled_labels[int(shuffled_labels.shape[0]*0.9): , :]
+
     print("Done Preprocessing!")
 
-    return data_minus_nulls, labels, index_dict, max_dict
+    return data_training, data_testing, labels_training, labels_testing, index_dict, max_dict, labels_dictionary
+
 
 
 def build_ids(column_data):
@@ -137,3 +153,24 @@ def field_team(top_bot, home, away):
     field = np.where(top_bot == 'Top', home, away)
     hit = np.where(top_bot == 'Bot', away, home)
     return field, hit
+
+def build_labels(labels_col_data):
+    """
+    Takes in a column of labels that has the different types of events that can happen as a form of string names
+    :param labels_col_data: data_dict[key], a column of the data_dict used in get_data
+    :return: Column of data now represented as ints instead of strings, and the dictionary mapping string to the number
+    """
+    # find all the unique string values within the column
+    labels_dict = {}
+    unique_values_list = np.unique(labels_col_data)
+    counter = 0
+    for option in unique_values_list:
+        # we don't want to remove null values since we need to know they're there in order to delete the whole row
+        # of data within get_data. Any null values we want to have removed (like on_3b, on_2b, on_1b) are done in
+        # get_data using np.where
+        if option != "null":
+            labels_dict[option] = counter
+            # associate value with an int
+            labels_col_data = np.where(labels_col_data== option, counter, labels_col_data)
+            counter += 1
+    return labels_col_data, labels_dict
