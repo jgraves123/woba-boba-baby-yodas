@@ -59,10 +59,7 @@ def get_data(data_file):
     # bat_score column now represents the difference between scores of hitting and fielding team
     data_dict['bat_score'] = data_dict['bat_score'].astype(np.int32) - data_dict['fld_score'].astype(np.int32)
 
-
     print("Stacking columns ...")
-
-
 
     # stack all the data to one massive array
     data_whole = np.column_stack((data_dict['pitch_type'], data_dict['batter'], data_dict['pitcher'],
@@ -92,17 +89,16 @@ def get_data(data_file):
     data_minus_nulls = np.delete(data_minus_nulls, [16, 3, 15], axis=1).astype(np.int32)
     update_columns = np.delete(columns_we_want, [16, 3, 15], axis=0)
 
-    # max dict is a dictionary between column name and index of column
+    # index dict is a dictionary between column name and index of column
     index_dict = {}
     for i, e in enumerate(update_columns):
         index_dict[e] = i
 
     # max dict is a dictionary between column name and number of unique values
+    # used in assignment.py to get number of pitchers, batters, etc.
     max_dict = {}
     for i, e in enumerate(update_columns):
-        max_dict[e] = np.argmax(data_minus_nulls[:, i]) + 1
-
-
+        max_dict[e] = np.amax(data_minus_nulls[:, i]) + 1
 
     print("Done Preprocessing!")
 
@@ -141,7 +137,3 @@ def field_team(top_bot, home, away):
     field = np.where(top_bot == 'Top', home, away)
     hit = np.where(top_bot == 'Bot', away, home)
     return field, hit
-
-
-
-get_data('full_2020_data.csv')
