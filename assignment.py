@@ -4,7 +4,7 @@ from preprocess import *
 
 
 class Model(tf.keras.Model):
-    def __init__(self, index_dict, max_dict, labels_dict, woba_dict):
+    def __init__(self, index_dict, max_dict, labels_dict, woba_array):
         """
         The Model class predicts the wOBA value of a given hitting/pitching/fielding setup combination.
         """
@@ -14,7 +14,7 @@ class Model(tf.keras.Model):
         self.index_dict = index_dict
         self.max_dict = max_dict
         self.labels_dict = labels_dict
-        self.woba_dict = woba_dict
+        self.woba_value = tf.Variable(woba_array, dtype=tf.float32)
 
         # these are the numbers of different batters, pitchers, teams, etc. in our overall dataset
         self.num_batters = max_dict['batter']
@@ -44,7 +44,7 @@ class Model(tf.keras.Model):
 
         # initializing two dense layers
         self.denseLayer0 = tf.keras.layers.Dense(self.dense_hidden_layer_size, activation="relu")
-        self.denseLayer1 = tf.keras.layers.Dense(self.num_possible_events, activation="softmax")
+        self.denseLayer1 = tf.keras.layers.Dense(self.num_possible_events) #, activation="softmax")
 
     def call(self, inputs):
         """
@@ -58,7 +58,7 @@ class Model(tf.keras.Model):
         p_embedding = tf.nn.embedding_lookup(self.E_pitcher, inputs[:, self.index_dict['pitcher']])
         t_embedding = tf.nn.embedding_lookup(self.E_team, inputs[:, self.index_dict['away_team']])
 
-        # create one hot vectors of pitch type, infield alignment, and outfield alignment 
+        # create one hot vectors of pitch type, infield alignment, and outfield alignment
         # TODO: why are we one-hotting these specific parameters? If so, why aren't we also one-hotting parameters such as
         # balls, strikes, outs, etc.?
         pitch_type = tf.one_hot(inputs[:, self.index_dict['pitch_type']], self.num_pitch_types)
@@ -101,7 +101,7 @@ class Model(tf.keras.Model):
         score_dif = inputs[:, self.index_dict['bat_score']]
         score_dif = tf.expand_dims(score_dif, axis=-1)
 
-        # concatenate all of the above data into a massive array of batch_size x 171 
+        # concatenate all of the above data into a massive array of batch_size x 171
         new_input = tf.concat([b_embedding, p_embedding, t_embedding, pitch_type, if_alignment, of_alignment, balls,
                                strikes, outs, batter_stand, p_throws, on_3b, on_2b, on_1b, inning, score_dif], axis=-1)
 
@@ -125,7 +125,8 @@ class Model(tf.keras.Model):
         real_woba = tf.convert_to_tensor(labels[:, 0][0])
         loss = tf.reduce_sum(tf.square(probs_value - real_woba))
         return loss
-
+        # event_labels = labels[:, 1][0]
+        # return tf.nn.softmax_cross_entropy_with_logits(tf.one_hot(event_labels, 19), probs)
 
     def loss_event(self, probs, labels):
         """
@@ -142,18 +143,15 @@ class Model(tf.keras.Model):
         loss = -tf.reduce_sum(tf.log(loss))
         return loss
 
+
     def woba_calc(self, probs):
         """
         Calculates woba given a probability of each outcome
-        :param probs: probabilities of outcomes at each index
+        :param probs: probabilities of outcomes at each index, batch size x 19
         :return: 1D array of woba values
         """
-        woba = [0]*self.batch_size
-        for i in range(self.batch_size):
-            for k, v in self.labels_dict.items():
-                woba[i] = probs[i][v]*self.woba_dict[k]
-        woba_tensor = tf.Variable(woba)
-        return woba_tensor
+        return tf.reduce_sum(probs * self.woba_value, axis=1) #tf.reshape(self.woba_values, (1, -1))), axis=1)
+
 
 
 
@@ -206,14 +204,14 @@ def test(model, test_inputs, test_labels):
         l = model.loss_mean_square(probs, batch_labels)
         loss_list.append(l)
 
-    average_loss = tf.reduce_mean(tf.convert_to_tensor(loss_list), dtype=tf.float32)
+    average_loss = tf.reduce_mean(tf.convert_to_tensor(loss_list))
     return average_loss
 
 
 # where the magic happens
 def main():
-    train_data, test_data, train_labels, test_labels,  labels_dictionary, woba_dict, index_dict, max_dict = get_data("full_2020_data.csv")
-    model = Model(index_dict, max_dict, labels_dictionary, woba_dict)
+    train_data, test_data, train_labels, test_labels,  labels_dictionary, woba_array, index_dict, max_dict = get_data("full_2020_data.csv")
+    model = Model(index_dict, max_dict, labels_dictionary, woba_array)
     print("Model initialized...")
 
     train(model, train_data, train_labels)

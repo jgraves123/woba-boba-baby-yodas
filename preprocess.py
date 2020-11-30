@@ -39,7 +39,7 @@ def get_data(data_file):
     
     # we not only assign an int ID to each possible event, but we also assosciate individual
     # events with specific int IDs for reference as labels in our loss function
-    data_dict['events'], labels_dictionary, woba_dict = build_labels(data_dict['events'], data_dict['woba_value'])
+    data_dict['events'], labels_dictionary, woba_array = build_labels(data_dict['events'], data_dict['woba_value'])
 
     # 1 = player on a given base, 0 = nobody on the base
     data_dict['on_3b'] = np.where(data_dict['on_3b'] == 'null', 0, 1)
@@ -130,7 +130,7 @@ def get_data(data_file):
 
     print("Done splitting data into training/testing with 90/10 split...")
     print("Done preprocessing!")
-    return data_training, data_testing, labels_training, labels_testing, labels_dictionary, woba_dict, index_dict, max_dict
+    return data_training, data_testing, labels_training, labels_testing, labels_dictionary, woba_array, index_dict, max_dict
 
 
 def build_ids(column_data):
@@ -197,7 +197,7 @@ def build_labels(labels_col_data, woba_column):
     """
     # find all the unique string values within the column
     labels_dict = {}
-    woba_dict = {}
+    woba_array = [None]*19
     counter = 0
     labels_col_copy = np.copy(labels_col_data)
     for i, e in enumerate(labels_col_copy):
@@ -206,8 +206,8 @@ def build_labels(labels_col_data, woba_column):
         # get_data using np.where
         if e != "null" and e not in labels_dict:
             labels_dict[e] = counter
-            woba_dict[e] = woba_column[i]
+            woba_array[counter] = float(woba_column[i])
             labels_col_data = np.where(labels_col_data == e, counter, labels_col_data)
             counter += 1
 
-    return labels_col_data, labels_dict, woba_dict
+    return labels_col_data, labels_dict, woba_array
