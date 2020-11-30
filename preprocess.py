@@ -27,15 +27,19 @@ def get_data(data_file):
     for col in columns_we_want:
         data_dict[col] = np.array(data_dict[col])
 
-    print("Done Creating Columns")
+    print("Done creating columns...")
 
     # build IDs maps string data in certain columns to IDs using build_ids function
     data_dict['pitch_type'] = build_ids(data_dict['pitch_type'])
     data_dict['batter'] = build_ids(data_dict['batter'])
     data_dict['pitcher'] = build_ids(data_dict['pitcher'])
-    data_dict['events'], labels_dictionary = build_labels((data_dict['events']))
     data_dict['if_fielding_alignment'] = build_ids(data_dict['if_fielding_alignment'])
     data_dict['of_fielding_alignment'] = build_ids(data_dict['of_fielding_alignment'])
+    
+    #we not only assign an int ID to each possible event, but we also assosciate individual 
+    #events with specific int IDs for reference as labels in our loss function 
+    data_dict['events'], labels_dictionary = build_labels((data_dict['events']))
+
 
     # 1 = player on a given base, 0 = nobody on the base
     data_dict['on_3b'] = np.where(data_dict['on_3b'] == 'null', 0, 1)
@@ -53,13 +57,17 @@ def get_data(data_file):
     data_dict['away_team'] = build_ids(data_dict['away_team'])
     # don't actually use these two columns, but leaving it in in case we want it later, and need to do it so typecasting
     # and operations later don't cause issues
+
+
+    #we will comment out the two lines below for now but will leave them for reference (ideally if project is completed/works, 
+    #we can delete these two lines)
     data_dict['home_team'] = build_ids(data_dict['home_team'])
     data_dict['inning_topbot'] = build_ids(data_dict['inning_topbot'])
+    ############################
 
     # bat_score column now represents the difference between scores of hitting and fielding team
     data_dict['bat_score'] = data_dict['bat_score'].astype(np.int32) - data_dict['fld_score'].astype(np.int32)
 
-    print("Stacking columns ...")
 
     # stack all the data to one massive array
     data_whole = np.column_stack((data_dict['pitch_type'], data_dict['batter'], data_dict['pitcher'],
@@ -70,7 +78,9 @@ def get_data(data_file):
                                   data_dict['woba_value'], data_dict['bat_score'], data_dict['fld_score'],
                                   data_dict['if_fielding_alignment'], data_dict['of_fielding_alignment']))
 
-    print("Deleting Rows...")
+
+    print("Done column stacking...")
+
 
     # get rows that have null values that can't be encoded/ would lead to model confusion
     # pitch_types (column 0), infield shift (column 18), and outfield_shift (column 19) all have entries will null
@@ -82,42 +92,57 @@ def get_data(data_file):
 
     # delete rows that have null values we want to remove
     data_minus_nulls = np.delete(data_whole, rows_to_delete, axis=0)
-
+    print("Done deleting null rows...")
     # separate out labels from data and remove the labels from the data array, also remove inning_topbot since we don't
     # want to use it at the current moment
     labels = (data_minus_nulls[:, 16].astype(np.float32), data_minus_nulls[:, 3].astype(np.float32))
-    # print(labels.shape, " labels shape before concat")
     labels = np.column_stack(labels)
-    print(labels.shape, " labels shape")
 
     data_minus_nulls = np.delete(data_minus_nulls, [16, 3, 15], axis=1).astype(np.int32)
-    update_columns = np.delete(columns_we_want, [16, 3, 15], axis=0)
+    columns_we_want = np.delete(columns_we_want, [16, 3, 15], axis=0)
 
-    # index dict is a dictionary between column name and index number of column
+    # index dict is a dictionary between column name and index number of column (ex: pitch type is column 0, batter is column 
+    #1, etc...)
     index_dict = {}
-    for i, e in enumerate(update_columns):
+    for i, e in enumerate(columns_we_want):
         index_dict[e] = i
 
+    print("Done creating index dictionary...")
     # max dict is a dictionary between column name and number of unique values
     # used in assignment.py to get number of pitchers, batters, etc.
     max_dict = {}
-    for i, e in enumerate(update_columns):
+    for i, e in enumerate(columns_we_want):
         max_dict[e] = np.amax(data_minus_nulls[:, i]) + 1
+
+
+    print("Done creating max value dictionary...")
+
+
+    #we will now shuffle our data for SGD 
 
     shuffle = np.arange(data_minus_nulls.shape[0])
     np.random.shuffle(shuffle)
     shuffled_data = np.take(data_minus_nulls, shuffle, axis=0)
-    print(shuffled_data.shape, " shuffled_data shape")
+    #print(shuffled_data.shape, " shuffled_data shape")
     shuffled_labels = np.take(labels, shuffle, axis=0)
+
+    print("Done shuffling data...")
+
+    #will now split into training and testing data. 90% of data is training, remaining 10% is for testing
 
     data_training = shuffled_data[0:int(shuffled_data.shape[0]*0.9), :]
     data_testing = shuffled_data[int(shuffled_data.shape[0]*0.9): , :]
     labels_training = shuffled_labels[0:int(shuffled_labels.shape[0]*0.9), :]
     labels_testing = shuffled_labels[int(shuffled_labels.shape[0]*0.9): , :]
 
-    print("Done Preprocessing!")
 
-    return data_training, data_testing, labels_training, labels_testing, index_dict, max_dict, labels_dictionary
+    print("Done splitting data into training/testing with 90/10 split...")
+
+    print("Done preprocessing!")
+
+    return data_training, data_testing, labels_training, labels_testing, labels_dictionary, index_dict, max_dict
+
+
 
 
 
