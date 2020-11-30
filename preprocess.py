@@ -1,6 +1,6 @@
 import numpy as np
-import tensorflow as tf
 import csv
+
 
 def get_data(data_file):
     """
@@ -10,9 +10,10 @@ def get_data(data_file):
     """
     data_dict = {}
     # column titles in the CSV we want to use
-    columns_we_want = np.array(['pitch_type', 'batter', 'pitcher', 'events', 'stand', 'p_throws', 'home_team', 'away_team',
-                       'balls', 'strikes', 'on_3b', 'on_2b', 'on_1b', 'outs_when_up', 'inning', 'inning_topbot',
-                       'woba_value', 'bat_score', 'fld_score', 'if_fielding_alignment', 'of_fielding_alignment'])
+    columns_we_want = np.array(['pitch_type', 'batter', 'pitcher', 'events', 'stand', 'p_throws', 'home_team',
+                                'away_team', 'balls', 'strikes', 'on_3b', 'on_2b', 'on_1b', 'outs_when_up', 'inning',
+                                'inning_topbot', 'woba_value', 'bat_score', 'fld_score', 'if_fielding_alignment',
+                                'of_fielding_alignment'])
 
     # initialize empty lists in dictionary to add to, where keys are column titles
     for col in columns_we_want:
@@ -36,10 +37,9 @@ def get_data(data_file):
     data_dict['if_fielding_alignment'] = build_ids(data_dict['if_fielding_alignment'])
     data_dict['of_fielding_alignment'] = build_ids(data_dict['of_fielding_alignment'])
     
-    #we not only assign an int ID to each possible event, but we also assosciate individual 
-    #events with specific int IDs for reference as labels in our loss function 
+    # we not only assign an int ID to each possible event, but we also assosciate individual
+    # events with specific int IDs for reference as labels in our loss function
     data_dict['events'], labels_dictionary = build_labels((data_dict['events']))
-
 
     # 1 = player on a given base, 0 = nobody on the base
     data_dict['on_3b'] = np.where(data_dict['on_3b'] == 'null', 0, 1)
@@ -55,19 +55,16 @@ def get_data(data_file):
     # away_team key now represents the fielding team name and home_team key now represents the hitting team name, which
     # we now map to IDs
     data_dict['away_team'] = build_ids(data_dict['away_team'])
+    ############################
     # don't actually use these two columns, but leaving it in in case we want it later, and need to do it so typecasting
     # and operations later don't cause issues
-
-
-    #we will comment out the two lines below for now but will leave them for reference (ideally if project is completed/works, 
-    #we can delete these two lines)
+    # TODO: remove here and from column stack if/when we determine we don't need them
     data_dict['home_team'] = build_ids(data_dict['home_team'])
     data_dict['inning_topbot'] = build_ids(data_dict['inning_topbot'])
     ############################
 
     # bat_score column now represents the difference between scores of hitting and fielding team
     data_dict['bat_score'] = data_dict['bat_score'].astype(np.int32) - data_dict['fld_score'].astype(np.int32)
-
 
     # stack all the data to one massive array
     data_whole = np.column_stack((data_dict['pitch_type'], data_dict['batter'], data_dict['pitcher'],
@@ -78,12 +75,10 @@ def get_data(data_file):
                                   data_dict['woba_value'], data_dict['bat_score'], data_dict['fld_score'],
                                   data_dict['if_fielding_alignment'], data_dict['of_fielding_alignment']))
 
-
     print("Done column stacking...")
 
-
     # get rows that have null values that can't be encoded/ would lead to model confusion
-    # pitch_types (column 0), infield shift (column 18), and outfield_shift (column 19) all have entries will null
+    # pitch_types (column 0), infield shift (column 19), and outfield_shift (column 20) all have entries will null
     # data that we cannot use/encode to be meaningful data
     rows_to_delete = []
     for row_num in range(data_whole.shape[0]):
@@ -92,7 +87,9 @@ def get_data(data_file):
 
     # delete rows that have null values we want to remove
     data_minus_nulls = np.delete(data_whole, rows_to_delete, axis=0)
+
     print("Done deleting null rows...")
+
     # separate out labels from data and remove the labels from the data array, also remove inning_topbot since we don't
     # want to use it at the current moment
     labels = (data_minus_nulls[:, 16].astype(np.float32), data_minus_nulls[:, 3].astype(np.float32))
@@ -101,49 +98,39 @@ def get_data(data_file):
     data_minus_nulls = np.delete(data_minus_nulls, [16, 3, 15], axis=1).astype(np.int32)
     columns_we_want = np.delete(columns_we_want, [16, 3, 15], axis=0)
 
-    # index dict is a dictionary between column name and index number of column (ex: pitch type is column 0, batter is column 
-    #1, etc...)
+    # index dict is a dictionary between column name and index number of column (ex: pitch type is column 0, batter is
+    # column 1, etc...)
     index_dict = {}
     for i, e in enumerate(columns_we_want):
         index_dict[e] = i
 
     print("Done creating index dictionary...")
-    # max dict is a dictionary between column name and number of unique values
-    # used in assignment.py to get number of pitchers, batters, etc.
+
+    # max dict is a dictionary between column name and number of unique values used in assignment.py to get number of
+    # pitchers, batters, etc.
     max_dict = {}
     for i, e in enumerate(columns_we_want):
         max_dict[e] = np.amax(data_minus_nulls[:, i]) + 1
 
-
     print("Done creating max value dictionary...")
 
-
-    #we will now shuffle our data for SGD 
-
+    # we will now shuffle our data for SGD
     shuffle = np.arange(data_minus_nulls.shape[0])
     np.random.shuffle(shuffle)
     shuffled_data = np.take(data_minus_nulls, shuffle, axis=0)
-    #print(shuffled_data.shape, " shuffled_data shape")
     shuffled_labels = np.take(labels, shuffle, axis=0)
 
     print("Done shuffling data...")
 
-    #will now split into training and testing data. 90% of data is training, remaining 10% is for testing
-
+    # split into training and testing data. 90% of data is training, remaining 10% is for testing
     data_training = shuffled_data[0:int(shuffled_data.shape[0]*0.9), :]
     data_testing = shuffled_data[int(shuffled_data.shape[0]*0.9): , :]
     labels_training = shuffled_labels[0:int(shuffled_labels.shape[0]*0.9), :]
     labels_testing = shuffled_labels[int(shuffled_labels.shape[0]*0.9): , :]
 
-
     print("Done splitting data into training/testing with 90/10 split...")
-
     print("Done preprocessing!")
-
     return data_training, data_testing, labels_training, labels_testing, labels_dictionary, index_dict, max_dict
-
-
-
 
 
 def build_ids(column_data):
@@ -179,6 +166,7 @@ def field_team(top_bot, home, away):
     hit = np.where(top_bot == 'Bot', away, home)
     return field, hit
 
+
 def build_labels(labels_col_data):
     """
     Takes in a column of labels that has the different types of events that can happen as a form of string names
@@ -196,6 +184,6 @@ def build_labels(labels_col_data):
         if option != "null":
             labels_dict[option] = counter
             # associate value with an int
-            labels_col_data = np.where(labels_col_data== option, counter, labels_col_data)
+            labels_col_data = np.where(labels_col_data == option, counter, labels_col_data)
             counter += 1
     return labels_col_data, labels_dict
