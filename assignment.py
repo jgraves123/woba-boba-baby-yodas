@@ -1,9 +1,10 @@
 import tensorflow as tf
+import numpy as np
 from preprocess import *
 
 
 class Model(tf.keras.Model):
-    def __init__(self, index_dict, max_dict, labels_dict):
+    def __init__(self, index_dict, max_dict, labels_dict, woba_dict):
         """
         The Model class predicts the wOBA value of a given hitting/pitching/fielding setup combination.
         """
@@ -13,6 +14,7 @@ class Model(tf.keras.Model):
         self.index_dict = index_dict
         self.max_dict = max_dict
         self.labels_dict = labels_dict
+        self.woba_dict = woba_dict
 
         # these are the numbers of different batters, pitchers, teams, etc. in our overall dataset
         self.num_batters = max_dict['batter']
@@ -111,14 +113,52 @@ class Model(tf.keras.Model):
         return probs
 
     # TODO: fill out.
-    def loss(self, probs, labels):
+    def loss_mean_square(self, probs, labels):
         """
         Calculates average loss of the prediction
         :param probs:
         :param labels:
         :return: the loss of the model as a tensor of size 1
         """
-        pass
+
+        probs_value = self.woba_calc(probs)
+        real_woba = tf.convert_to_tensor(labels[:, 0][0])
+        loss = tf.reduce_sum(tf.square(probs_value - real_woba))
+        return loss
+
+
+    def loss_event(self, probs, labels):
+        """
+        Calculates average loss of the prediction
+        :param probs:
+        :param labels:
+        :return: the loss of the model as a tensor of size 1
+        """
+        #lossArray = probs[range(self.batch_size), labels_dict[labels[:, 1]]
+
+        loss = tf.Variable([0]*self.batch_size)
+        for i, e in enumerate(labels[:, 1][0]):
+            loss[i] = probs[i][self.labels_dict[e]]
+        loss = -tf.reduce_sum(tf.log(loss))
+        return loss
+
+    def woba_calc(self, probs):
+        """
+        Calculates woba given a probability of each outcome
+        :param probs: probabilities of outcomes at each index
+        :return: 1D array of woba values
+        """
+        woba = [0]*self.batch_size
+        for i in range(self.batch_size):
+            for k, v in self.labels_dict.items():
+                woba[i] = probs[i][v]*self.woba_dict[k]
+        woba_tensor = tf.Variable(woba)
+        return woba_tensor
+
+
+
+
+
 
 
 def train(model, train_inputs, train_labels):
@@ -138,7 +178,9 @@ def train(model, train_inputs, train_labels):
         # update gradients
         with tf.GradientTape() as tape: 
             probs = model.call(batch_inputs)
-            l = model.loss(probs, batch_labels)
+            l = model.loss_mean_square(probs, batch_labels)
+
+        print("Model's loss: ", l)
         gradients = tape.gradient(l, model.trainable_variables)
         model.optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
@@ -161,7 +203,7 @@ def test(model, test_inputs, test_labels):
 
         # get loss and add to list
         probs = model.call(batch_inputs)
-        l = model.loss(probs, batch_labels)
+        l = model.loss_mean_square(probs, batch_labels)
         loss_list.append(l)
 
     average_loss = tf.reduce_mean(tf.convert_to_tensor(loss_list), dtype=tf.float32)
@@ -170,8 +212,8 @@ def test(model, test_inputs, test_labels):
 
 # where the magic happens
 def main():
-    train_data, test_data, train_labels, test_labels,  labels_dictionary, index_dict, max_dict = get_data("full_2020_data.csv")
-    model = Model(index_dict, max_dict, labels_dictionary)
+    train_data, test_data, train_labels, test_labels,  labels_dictionary, woba_dict, index_dict, max_dict = get_data("full_2020_data.csv")
+    model = Model(index_dict, max_dict, labels_dictionary, woba_dict)
     print("Model initialized...")
 
     train(model, train_data, train_labels)

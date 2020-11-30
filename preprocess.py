@@ -39,7 +39,7 @@ def get_data(data_file):
     
     # we not only assign an int ID to each possible event, but we also assosciate individual
     # events with specific int IDs for reference as labels in our loss function
-    data_dict['events'], labels_dictionary = build_labels((data_dict['events']))
+    data_dict['events'], labels_dictionary, woba_dict = build_labels(data_dict['events'], data_dict['woba_value'])
 
     # 1 = player on a given base, 0 = nobody on the base
     data_dict['on_3b'] = np.where(data_dict['on_3b'] == 'null', 0, 1)
@@ -130,7 +130,7 @@ def get_data(data_file):
 
     print("Done splitting data into training/testing with 90/10 split...")
     print("Done preprocessing!")
-    return data_training, data_testing, labels_training, labels_testing, labels_dictionary, index_dict, max_dict
+    return data_training, data_testing, labels_training, labels_testing, labels_dictionary, woba_dict, index_dict, max_dict
 
 
 def build_ids(column_data):
@@ -167,7 +167,29 @@ def field_team(top_bot, home, away):
     return field, hit
 
 
-def build_labels(labels_col_data):
+# def build_labels(labels_col_data):
+#     """
+#     Takes in a column of labels that has the different types of events that can happen as a form of string names
+#     :param labels_col_data: data_dict[key], a column of the data_dict used in get_data
+#     :return: Column of data now represented as ints instead of strings, and the dictionary mapping string to the number
+#     """
+#     # find all the unique string values within the column
+#     labels_dict = {}
+#     unique_values_list = np.unique(labels_col_data)
+#     counter = 0
+#     for option in unique_values_list:
+#         # we don't want to remove null values since we need to know they're there in order to delete the whole row
+#         # of data within get_data. Any null values we want to have removed (like on_3b, on_2b, on_1b) are done in
+#         # get_data using np.where
+#         if option != "null":
+#             labels_dict[option] = counter
+#             # associate value with an int
+#             labels_col_data = np.where(labels_col_data == option, counter, labels_col_data)
+#             counter += 1
+#     return labels_col_data, labels_dict
+
+
+def build_labels(labels_col_data, woba_column):
     """
     Takes in a column of labels that has the different types of events that can happen as a form of string names
     :param labels_col_data: data_dict[key], a column of the data_dict used in get_data
@@ -175,15 +197,17 @@ def build_labels(labels_col_data):
     """
     # find all the unique string values within the column
     labels_dict = {}
-    unique_values_list = np.unique(labels_col_data)
+    woba_dict = {}
     counter = 0
-    for option in unique_values_list:
+    labels_col_copy = np.copy(labels_col_data)
+    for i, e in enumerate(labels_col_copy):
         # we don't want to remove null values since we need to know they're there in order to delete the whole row
         # of data within get_data. Any null values we want to have removed (like on_3b, on_2b, on_1b) are done in
         # get_data using np.where
-        if option != "null":
-            labels_dict[option] = counter
-            # associate value with an int
-            labels_col_data = np.where(labels_col_data == option, counter, labels_col_data)
+        if e != "null" and e not in labels_dict:
+            labels_dict[e] = counter
+            woba_dict[e] = woba_column[i]
+            labels_col_data = np.where(labels_col_data == e, counter, labels_col_data)
             counter += 1
-    return labels_col_data, labels_dict
+
+    return labels_col_data, labels_dict, woba_dict
