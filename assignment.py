@@ -4,6 +4,17 @@ from preprocess import *
 from scipy import stats
 
 
+"""
+Training our model:
+The model seems to be getting general trends correct but we are running into two problems that seem to be contradictory:
+1) The results have a ton of varience. Each time we run it the predicted outcomes for a given state vary wildly
+2) The model seems to do worse when you increase the number of epochs -> probably due to overfitting?
+Questions:
+Are there certain things we could do that consider both of these difficulties? A normal response to high varience would 
+seem to be to increase the number of epochs but that doesn't seem to work here.
+"""
+
+
 class Model(tf.keras.Model):
     def __init__(self, index_dict, max_dict, labels_dict, woba_array, all_cat=True):
         """
@@ -33,7 +44,7 @@ class Model(tf.keras.Model):
 
         # arbitrary hyperparameters - can be adjusted to improve model performance as needed 
         self.embedding_size = 50
-        self.batch_size = 100
+        self.batch_size = 1000
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
         self.dense_hidden_layer_size = 100
 
