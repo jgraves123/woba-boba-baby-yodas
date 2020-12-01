@@ -1,10 +1,11 @@
 import tensorflow as tf
 import numpy as np
 from preprocess import *
+from scipy import stats
 
 
 class Model(tf.keras.Model):
-    def __init__(self, index_dict, max_dict, labels_dict, woba_array):
+    def __init__(self, index_dict, max_dict, labels_dict, woba_array, all_cat=True):
         """
         The Model class predicts the wOBA value of a given hitting/pitching/fielding setup combination.
         """
@@ -14,11 +15,17 @@ class Model(tf.keras.Model):
         self.index_dict = index_dict
         self.max_dict = max_dict
         self.labels_dict = labels_dict
-        self.woba_value = tf.Variable(woba_array, dtype=tf.float32)
+
+        if all_cat:
+            self.woba_value = woba_array
+            self.num_possible_events = 19
+        else:
+            self.woba_value = [0, .7, .9, 1.25, 1.6, 2]
+            self.num_possible_events = 6
 
         # these are the numbers of different batters, pitchers, teams, etc. in our overall dataset
         self.num_batters = max_dict['batter']
-        self.num_pitchers = max_dict['pitcher']
+        self.num_pitchers = max_dict['player_name']
         self.num_teams = max_dict['away_team']
         self.num_pitch_types = max_dict['pitch_type']
         self.num_if_alignments = max_dict['if_fielding_alignment']
@@ -26,13 +33,13 @@ class Model(tf.keras.Model):
 
         # arbitrary hyperparameters - can be adjusted to improve model performance as needed 
         self.embedding_size = 50
-        self.batch_size = 1000
+        self.batch_size = 100
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
         self.dense_hidden_layer_size = 100
 
         # this is the number of different possible events (outcomes) per at bat situation (ex: out, home run, single,
         # double, etc.). There are 19 different play outcomes in our dataset
-        self.num_possible_events = 19
+
 
         # embedding lookups for batter, pitcher, and team IDs  
         self.E_batter = tf.Variable(
@@ -44,7 +51,8 @@ class Model(tf.keras.Model):
 
         # initializing two dense layers
         self.denseLayer0 = tf.keras.layers.Dense(self.dense_hidden_layer_size, activation="relu")
-        self.denseLayer1 = tf.keras.layers.Dense(self.num_possible_events) #, activation="softmax")
+        self.denseLayer1 = tf.keras.layers.Dense(self.dense_hidden_layer_size, activation="relu")
+        self.denseLayer2 = tf.keras.layers.Dense(self.num_possible_events, activation="softmax")
 
     def call(self, inputs):
         """
@@ -55,7 +63,7 @@ class Model(tf.keras.Model):
 
         # perform embedding lookups on our batter, pitcher, and team IDs 
         b_embedding = tf.nn.embedding_lookup(self.E_batter, inputs[:, self.index_dict['batter']])
-        p_embedding = tf.nn.embedding_lookup(self.E_pitcher, inputs[:, self.index_dict['pitcher']])
+        p_embedding = tf.nn.embedding_lookup(self.E_pitcher, inputs[:, self.index_dict['player_name']])
         t_embedding = tf.nn.embedding_lookup(self.E_team, inputs[:, self.index_dict['away_team']])
 
         # create one hot vectors of pitch type, infield alignment, and outfield alignment
@@ -105,9 +113,11 @@ class Model(tf.keras.Model):
         new_input = tf.concat([b_embedding, p_embedding, t_embedding, pitch_type, if_alignment, of_alignment, balls,
                                strikes, outs, batter_stand, p_throws, on_3b, on_2b, on_1b, inning, score_dif], axis=-1)
 
+
         # pass new_input through our two dense layers
         out0 = self.denseLayer0(new_input)
-        probs = self.denseLayer1(out0)
+        out1 = self.denseLayer1(out0)
+        probs = self.denseLayer2(out1)
 
         # return probabilities
         return probs
@@ -122,11 +132,11 @@ class Model(tf.keras.Model):
         """
 
         probs_value = self.woba_calc(probs)
-        real_woba = tf.convert_to_tensor(labels[:, 0][0])
-        loss = tf.reduce_sum(tf.square(probs_value - real_woba))
+        real_woba = tf.convert_to_tensor(labels[:, 0])
+        loss = tf.reduce_mean(tf.square(probs_value - real_woba))*100
         return loss
-        # event_labels = labels[:, 1][0]
-        # return tf.nn.softmax_cross_entropy_with_logits(tf.one_hot(event_labels, 19), probs)
+
+
 
     def loss_event(self, probs, labels):
         """
@@ -137,11 +147,27 @@ class Model(tf.keras.Model):
         """
         #lossArray = probs[range(self.batch_size), labels_dict[labels[:, 1]]
 
-        loss = tf.Variable([0]*self.batch_size)
-        for i, e in enumerate(labels[:, 1][0]):
-            loss[i] = probs[i][self.labels_dict[e]]
-        loss = -tf.reduce_sum(tf.log(loss))
-        return loss
+        new_labels = labels[:, 1]
+
+        return tf.reduce_sum(tf.keras.losses.sparse_categorical_crossentropy(new_labels, probs))
+
+        # loss = tf.Variable([0]*self.batch_size)
+        # for i, e in enumerate(labels[:, 1]):
+        #     loss[i] = probs[i][e]
+        # loss = -tf.reduce_sum(tf.log(loss))
+        # return loss
+
+    def accuracy(self, probs, labels):
+        """
+        Calculates average loss of the prediction
+        :param probs:
+        :param labels:
+        :return: the loss of the model as a tensor of size 1
+        """
+
+        probs_value = self.woba_calc(probs)
+        real_woba = labels[:, 0]
+        return probs_value.numpy(), real_woba
 
 
     def woba_calc(self, probs):
@@ -168,6 +194,7 @@ def train(model, train_inputs, train_labels):
     :return: None
     """
     # go through data batch by batch
+    loss_list = []
     for x in range(0, train_inputs.shape[0], model.batch_size):
         # get inputs and labels for that batch
         batch_inputs = train_inputs[x:x+model.batch_size, :]
@@ -177,10 +204,14 @@ def train(model, train_inputs, train_labels):
         with tf.GradientTape() as tape: 
             probs = model.call(batch_inputs)
             l = model.loss_mean_square(probs, batch_labels)
+            loss_list.append(l)
 
-        print("Model's loss: ", l)
+        # print("Model's loss: ", l)
         gradients = tape.gradient(l, model.trainable_variables)
         model.optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+    average_loss = tf.reduce_mean(tf.convert_to_tensor(loss_list))
+    return average_loss
 
 
 def test(model, test_inputs, test_labels):
@@ -193,6 +224,8 @@ def test(model, test_inputs, test_labels):
     """
 
     loss_list = []
+    all_pred = np.array([])
+    all_true = np.array([])
     # go through data batch by batch
     for x in range(0, test_inputs.shape[0], model.batch_size):
         # get inputs and labels for that batch
@@ -203,23 +236,113 @@ def test(model, test_inputs, test_labels):
         probs = model.call(batch_inputs)
         l = model.loss_mean_square(probs, batch_labels)
         loss_list.append(l)
+        pred, true = model.accuracy(probs, batch_labels)
+        all_pred = np.concatenate([all_pred, np.array(pred)])
+        all_true = np.concatenate([all_true, np.array(true)])
+
+    slope, intercept, r_value, p_value, std_err = stats.linregress(all_true, all_pred)
+
+    print(r_value, " r-value")
+    print(r_value ** 2, " r-squared")
+    print(p_value, " p-value")
 
     average_loss = tf.reduce_mean(tf.convert_to_tensor(loss_list))
     return average_loss
 
+def test_value(model, input):
+    probs = model.call(input)
+    pred, fake = model.accuracy(probs, np.array([[0, 0]]))
+    return probs, pred
+
+def create_test(pitcher_dict, batter_dict, team_dict, pitcher, batter, team, strikes, balls, shift):
+    input = [0]*18
+    input[0] = 0 #FF
+    input[1] = batter_dict[batter]
+    input[2] = pitcher_dict[pitcher]
+    input[3] = 1 # R - batter
+    input[4] = 1 # R - pitcher
+    # input 5 unused
+    input[6] = team_dict[team]
+    # 9 - 12 mean 0-0 count and no one on and none out
+    input[7] = balls
+    input[8] = strikes
+    input[13] = 1 # first inning
+    # 14 means tied game, and 15 unused, and 16-17 mean standard inf and of
+    input[16] = shift
+    return np.array([input])
 
 # where the magic happens
 def main():
-    train_data, test_data, train_labels, test_labels,  labels_dictionary, woba_array, index_dict, max_dict = get_data("full_2020_data.csv")
-    model = Model(index_dict, max_dict, labels_dictionary, woba_array)
+    train_data, test_data, train_labels, test_labels, labels_dictionary, woba_array, index_dict, max_dict, pitcher_dict, batter_dict, team_dict = get_data("full_2020_data.csv")
+    model = Model(index_dict, max_dict, labels_dictionary, woba_array, True)
     print("Model initialized...")
 
-    train(model, train_data, train_labels)
-    print("Model training finished...")
+    for j in range(2):
+        val = train(model, train_data, train_labels)
+        print('Epoch: ', j, ' - ', val)
+        sorting = tf.random.shuffle(range(np.size(train_labels, 0)))
+        train_data = tf.gather(train_data, sorting)
+        train_labels = tf.gather(train_labels, sorting)
+        acc = test(model, test_data, test_labels)
+        print("Model accuracy: ", acc)
 
-    acc = test(model, test_data, test_labels)
+    # train(model, train_data, train_labels)
+    # print("Model training finished...")
+
+    # acc = test(model, test_data, test_labels)
     print("Model testing finished...")
-    print("Model accuracy: ", acc)
+    # print("Model accuracy: ", acc)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 0, 0, 0)
+    print("Springer v. Bieber")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 2, 0, 0)
+    print("Springer v. Bieber w/ 2 strikes")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 0, 3, 0)
+    print("Springer v. Bieber w/ 3 balls")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '666176', 'CLE', 0, 0, 0)
+    print("Adell v. Bieber")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '543807', 'NYM', 0, 0, 0)
+    print("Springer v. Porcello")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '666176', 'NYM', 0, 0, 0)
+    print("Adell v. Porcello")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '518934', 'NYM', 0, 0, 0)
+    print("Leimahiu v. Porcello no shift")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '518934', 'NYM', 0, 0, 1)
+    print("Leimahiu v. Porcello shift")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '448801', 'NYM', 0, 0, 0)
+    print("Davis v. Porcello no shift")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '448801', 'NYM', 0, 0, 1)
+    print("Davis v. Porcello shift")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
 
 
 if __name__ == '__main__':

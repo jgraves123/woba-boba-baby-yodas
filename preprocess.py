@@ -10,7 +10,7 @@ def get_data(data_file):
     """
     data_dict = {}
     # column titles in the CSV we want to use
-    columns_we_want = np.array(['pitch_type', 'batter', 'pitcher', 'events', 'stand', 'p_throws', 'home_team',
+    columns_we_want = np.array(['pitch_type', 'batter', 'player_name', 'events', 'stand', 'p_throws', 'home_team',
                                 'away_team', 'balls', 'strikes', 'on_3b', 'on_2b', 'on_1b', 'outs_when_up', 'inning',
                                 'inning_topbot', 'woba_value', 'bat_score', 'fld_score', 'if_fielding_alignment',
                                 'of_fielding_alignment'])
@@ -32,8 +32,8 @@ def get_data(data_file):
 
     # build IDs maps string data in certain columns to IDs using build_ids function
     data_dict['pitch_type'] = build_ids(data_dict['pitch_type'])
-    data_dict['batter'] = build_ids(data_dict['batter'])
-    data_dict['pitcher'] = build_ids(data_dict['pitcher'])
+    data_dict['batter'], batter_dict = build_ids_dict(data_dict['batter'])
+    data_dict['player_name'], pitcher_dict = build_ids_dict(data_dict['player_name'])
     data_dict['if_fielding_alignment'] = build_ids(data_dict['if_fielding_alignment'])
     data_dict['of_fielding_alignment'] = build_ids(data_dict['of_fielding_alignment'])
     
@@ -54,7 +54,7 @@ def get_data(data_file):
                                                                 data_dict['away_team'])
     # away_team key now represents the fielding team name and home_team key now represents the hitting team name, which
     # we now map to IDs
-    data_dict['away_team'] = build_ids(data_dict['away_team'])
+    data_dict['away_team'], team_dict = build_ids_dict(data_dict['away_team'])
     ############################
     # don't actually use these two columns, but leaving it in in case we want it later, and need to do it so typecasting
     # and operations later don't cause issues
@@ -67,7 +67,7 @@ def get_data(data_file):
     data_dict['bat_score'] = data_dict['bat_score'].astype(np.int32) - data_dict['fld_score'].astype(np.int32)
 
     # stack all the data to one massive array
-    data_whole = np.column_stack((data_dict['pitch_type'], data_dict['batter'], data_dict['pitcher'],
+    data_whole = np.column_stack((data_dict['pitch_type'], data_dict['batter'], data_dict['player_name'],
                                   data_dict['events'], data_dict['stand'], data_dict['p_throws'],
                                   data_dict['home_team'], data_dict['away_team'], data_dict['balls'],
                                   data_dict['strikes'], data_dict['on_3b'], data_dict['on_2b'], data_dict['on_1b'],
@@ -130,7 +130,7 @@ def get_data(data_file):
 
     print("Done splitting data into training/testing with 90/10 split...")
     print("Done preprocessing!")
-    return data_training, data_testing, labels_training, labels_testing, labels_dictionary, woba_array, index_dict, max_dict
+    return data_training, data_testing, labels_training, labels_testing, labels_dictionary, woba_array, index_dict, max_dict, pitcher_dict, batter_dict, team_dict
 
 
 def build_ids(column_data):
@@ -167,26 +167,26 @@ def field_team(top_bot, home, away):
     return field, hit
 
 
-# def build_labels(labels_col_data):
-#     """
-#     Takes in a column of labels that has the different types of events that can happen as a form of string names
-#     :param labels_col_data: data_dict[key], a column of the data_dict used in get_data
-#     :return: Column of data now represented as ints instead of strings, and the dictionary mapping string to the number
-#     """
-#     # find all the unique string values within the column
-#     labels_dict = {}
-#     unique_values_list = np.unique(labels_col_data)
-#     counter = 0
-#     for option in unique_values_list:
-#         # we don't want to remove null values since we need to know they're there in order to delete the whole row
-#         # of data within get_data. Any null values we want to have removed (like on_3b, on_2b, on_1b) are done in
-#         # get_data using np.where
-#         if option != "null":
-#             labels_dict[option] = counter
-#             # associate value with an int
-#             labels_col_data = np.where(labels_col_data == option, counter, labels_col_data)
-#             counter += 1
-#     return labels_col_data, labels_dict
+def build_ids_dict(labels_col_data):
+    """
+    Takes in a column of labels that has the different types of events that can happen as a form of string names
+    :param labels_col_data: data_dict[key], a column of the data_dict used in get_data
+    :return: Column of data now represented as ints instead of strings, and the dictionary mapping string to the number
+    """
+    # find all the unique string values within the column
+    labels_dict = {}
+    unique_values_list = np.unique(labels_col_data)
+    counter = 0
+    for option in unique_values_list:
+        # we don't want to remove null values since we need to know they're there in order to delete the whole row
+        # of data within get_data. Any null values we want to have removed (like on_3b, on_2b, on_1b) are done in
+        # get_data using np.where
+        if option != "null":
+            labels_dict[option] = counter
+            # associate value with an int
+            labels_col_data = np.where(labels_col_data == option, counter, labels_col_data)
+            counter += 1
+    return labels_col_data, labels_dict
 
 
 def build_labels(labels_col_data, woba_column):
