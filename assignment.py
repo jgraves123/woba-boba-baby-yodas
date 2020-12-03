@@ -260,7 +260,7 @@ def create_test(pitcher_dict, batter_dict, team_dict, pitcher, batter, team, str
     :param pitcher_dict: dictionary of pitcher IDs to modified preprocessed pitcher IDs
     :returns: np array of the input in the requisite format for our model
     """
-    input = [0]*17
+    input = [0]*16
     input[0] = 0  # FF or standard fastball
     input[1] = batter_dict[batter]
     input[2] = pitcher_dict[pitcher]
@@ -271,8 +271,8 @@ def create_test(pitcher_dict, batter_dict, team_dict, pitcher, batter, team, str
     input[7] = strikes
     # 8 - 11 mean 0-0 count and no one on and no one out
     input[12] = 1  # first inning
-    # 13 means tied game, 14 unused, 15 means no inf shift
-    input[16] = shift  # of shift
+    # 13 means tied game, 14 means no inf shift
+    input[15] = shift  # of shift
     return np.array([input])
 
 # where the magic happens
