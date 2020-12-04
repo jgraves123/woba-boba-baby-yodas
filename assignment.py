@@ -1,6 +1,7 @@
 import tensorflow as tf
 from preprocess import *
 from scipy import stats
+import tensorflow_addons as tfa
 
 
 """
@@ -25,6 +26,7 @@ class Model(tf.keras.Model):
         self.index_dict = index_dict
         self.max_dict = max_dict
         self.labels_dict = labels_dict
+        self.all_cat = all_cat
 
         # since some of the outputs are the same woba value (ex. strikeout vs fly out both have a woba of 0), not
         # all_cat consolidates some categories
@@ -32,7 +34,7 @@ class Model(tf.keras.Model):
             self.woba_value = woba_array
             self.num_possible_events = 19
         else:
-            self.woba_value = [0, .7, .9, 1.25, 1.6, 2]
+            self.woba_value = woba_array
             self.num_possible_events = 6
 
         # these are the numbers of different batters, pitchers, teams, etc. in our overall dataset
@@ -44,7 +46,7 @@ class Model(tf.keras.Model):
         self.num_of_alignments = max_dict['of_fielding_alignment']
 
         # arbitrary hyperparameters - can be adjusted to improve model performance as needed 
-        self.embedding_size = 50
+        self.embedding_size = 100
         self.batch_size = 1000
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
         self.dense_hidden_layer_size = 100
@@ -147,8 +149,13 @@ class Model(tf.keras.Model):
         :param labels: correct play outcomes
         :return: the cross entropy loss of the model as a tensor of size 1
         """
-        new_labels = labels[:, 1]
-        return tf.reduce_sum(tf.keras.losses.sparse_categorical_crossentropy(new_labels, probs))
+        new_labels = tf.cast(labels[:, 1], dtype=tf.int32)
+        loss = tfa.losses.SigmoidFocalCrossEntropy()
+        if self.all_cat:
+            count = 19
+        else:
+            count = 6
+        return tf.reduce_sum(loss(tf.one_hot(new_labels, count), probs))
 
     def accuracy(self, probs, labels):
         """
@@ -188,7 +195,7 @@ def train(model, train_inputs, train_labels):
         # update gradients
         with tf.GradientTape() as tape: 
             probs = model.call(batch_inputs)
-            l = model.loss_mean_square(probs, batch_labels)
+            l = model.loss_event(probs, batch_labels)
             loss_list.append(l)
         gradients = tape.gradient(l, model.trainable_variables)
         model.optimizer.apply_gradients(zip(gradients, model.trainable_variables))
@@ -216,9 +223,8 @@ def test(model, test_inputs, test_labels):
 
         # get loss and add to list
         probs = model.call(batch_inputs)
-        l = model.loss_mean_square(probs, batch_labels)
+        l = model.loss_event(probs, batch_labels)
         loss_list.append(l)
-        print(l)
 
         # get predictions to calculate regression statistics
         pred, true = model.accuracy(probs, batch_labels)
@@ -231,6 +237,7 @@ def test(model, test_inputs, test_labels):
     print("p-value: ", p_value)
 
     average_loss = tf.reduce_mean(tf.convert_to_tensor(loss_list))
+    print("test loss: ", average_loss)
     return average_loss
 
 
@@ -278,70 +285,71 @@ def create_test(pitcher_dict, batter_dict, team_dict, pitcher, batter, team, str
 # where the magic happens
 def main():
     train_data, test_data, train_labels, test_labels, labels_dictionary, woba_array, index_dict, max_dict, \
-        pitcher_dict, batter_dict, team_dict = get_data("full_2020_data.csv")
-    model = Model(index_dict, max_dict, labels_dictionary, woba_array, True)
+        pitcher_dict, batter_dict, team_dict = get_data("full_2020_data.csv", False)
+    model = Model(index_dict, max_dict, labels_dictionary, woba_array, False)
     print("Model initialized...")
 
-    for j in range(2):
+    for j in range(4):
         val = train(model, train_data, train_labels)
         print('Epoch:', j, 'average loss:', val)
         sorting = tf.random.shuffle(range(np.size(train_labels, 0)))
         train_data = tf.gather(train_data, sorting)
         train_labels = tf.gather(train_labels, sorting)
+        acc = test(model, test_data, test_labels)
 
-    print("Model testing finished...")
-    acc = test(model, test_data, test_labels)
-    print("Model accuracy: ", acc)
+    # print("Model testing finished...")
+    # acc = test(model, test_data, test_labels)
+    # print("Model accuracy: ", acc)
 
-    value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 0, 0, 0)
-    print("Springer v. Bieber")
-    probs, pred = test_value(model, value)
-    print("predicted wOBA: ", pred)
-
-    value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 2, 0, 0)
-    print("Springer v. Bieber w/ 2 strikes")
-    probs, pred = test_value(model, value)
-    print("predicted wOBA: ", pred)
-
-    value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 0, 3, 0)
-    print("Springer v. Bieber w/ 3 balls")
-    probs, pred = test_value(model, value)
-    print("predicted wOBA: ", pred)
-
-    value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '666176', 'CLE', 0, 0, 0)
-    print("Adell v. Bieber")
-    probs, pred = test_value(model, value)
-    print("predicted wOBA: ", pred)
-
-    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '543807', 'NYM', 0, 0, 0)
-    print("Springer v. Porcello")
-    probs, pred = test_value(model, value)
-    print("predicted wOBA: ", pred)
-
-    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '666176', 'NYM', 0, 0, 0)
-    print("Adell v. Porcello")
-    probs, pred = test_value(model, value)
-    print("predicted wOBA: ", pred)
-
-    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '518934', 'NYM', 0, 0, 0)
-    print("Leimahiu v. Porcello no shift")
-    probs, pred = test_value(model, value)
-    print("predicted wOBA: ", pred)
-
-    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '518934', 'NYM', 0, 0, 1)
-    print("Leimahiu v. Porcello shift")
-    probs, pred = test_value(model, value)
-    print("predicted wOBA: ", pred)
-
-    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '448801', 'NYM', 0, 0, 0)
-    print("Davis v. Porcello no shift")
-    probs, pred = test_value(model, value)
-    print("predicted wOBA: ", pred)
-
-    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '448801', 'NYM', 0, 0, 1)
-    print("Davis v. Porcello shift")
-    probs, pred = test_value(model, value)
-    print("predicted wOBA: ", pred)
+    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 0, 0, 0)
+    # print("Springer v. Bieber")
+    # probs, pred = test_value(model, value)
+    # print("predicted wOBA: ", pred)
+    #
+    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 2, 0, 0)
+    # print("Springer v. Bieber w/ 2 strikes")
+    # probs, pred = test_value(model, value)
+    # print("predicted wOBA: ", pred)
+    #
+    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 0, 3, 0)
+    # print("Springer v. Bieber w/ 3 balls")
+    # probs, pred = test_value(model, value)
+    # print("predicted wOBA: ", pred)
+    #
+    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '666176', 'CLE', 0, 0, 0)
+    # print("Adell v. Bieber")
+    # probs, pred = test_value(model, value)
+    # print("predicted wOBA: ", pred)
+    #
+    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '543807', 'NYM', 0, 0, 0)
+    # print("Springer v. Porcello")
+    # probs, pred = test_value(model, value)
+    # print("predicted wOBA: ", pred)
+    #
+    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '666176', 'NYM', 0, 0, 0)
+    # print("Adell v. Porcello")
+    # probs, pred = test_value(model, value)
+    # print("predicted wOBA: ", pred)
+    #
+    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '518934', 'NYM', 0, 0, 0)
+    # print("Leimahiu v. Porcello no shift")
+    # probs, pred = test_value(model, value)
+    # print("predicted wOBA: ", pred)
+    #
+    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '518934', 'NYM', 0, 0, 1)
+    # print("Leimahiu v. Porcello shift")
+    # probs, pred = test_value(model, value)
+    # print("predicted wOBA: ", pred)
+    #
+    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '448801', 'NYM', 0, 0, 0)
+    # print("Davis v. Porcello no shift")
+    # probs, pred = test_value(model, value)
+    # print("predicted wOBA: ", pred)
+    #
+    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '448801', 'NYM', 0, 0, 1)
+    # print("Davis v. Porcello shift")
+    # probs, pred = test_value(model, value)
+    # print("predicted wOBA: ", pred)
 
 
 if __name__ == '__main__':

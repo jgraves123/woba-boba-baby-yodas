@@ -2,7 +2,7 @@ import numpy as np
 import csv
 
 
-def get_data(data_file):
+def get_data(data_file, all_cat):
     """
     Takes in csv file and reads it to gather training and testing data and labels.
     :param data_file: file path of the csv data
@@ -39,7 +39,7 @@ def get_data(data_file):
     
     # we not only assign an int ID to each possible event, but we also assosciate individual
     # events with specific int IDs for reference as labels in our loss function
-    data_dict['events'], labels_dictionary, woba_array = build_labels(data_dict['events'], data_dict['woba_value'])
+    data_dict['events'], labels_dictionary, woba_array = build_labels(data_dict['events'], data_dict['woba_value'], all_cat)
 
     # 1 = player on a given base, 0 = nobody on the base
     data_dict['on_3b'] = np.where(data_dict['on_3b'] == 'null', 0, 1)
@@ -119,6 +119,8 @@ def get_data(data_file):
     labels_training = shuffled_labels[0:int(shuffled_labels.shape[0]*0.9), :]
     labels_testing = shuffled_labels[int(shuffled_labels.shape[0]*0.9):, :]
 
+# TODO delete labels_dict
+
     print("Done splitting data into training/testing with 90/10 split...")
     print("Done preprocessing!")
     return data_training, data_testing, labels_training, labels_testing, labels_dictionary, woba_array, \
@@ -181,7 +183,7 @@ def build_ids_dict(labels_col_data):
     return labels_col_data, labels_dict
 
 
-def build_labels(labels_col_data, woba_column):
+def build_labels(labels_col_data, woba_column, all_cat):
     """
     Takes in a column of labels that has the different types of events that can happen as a form of string names
     :param woba_column: an array from data_dict with the woba value corresponding to every play outcome type
@@ -190,19 +192,37 @@ def build_labels(labels_col_data, woba_column):
     """
     # find all the unique string values within the column
     labels_dict = {}
-    woba_array = [None]*19
+    if all_cat:
+        woba_array = [None]*19
+    else:
+        woba_array = [None]*6
     counter = 0
-    labels_col_copy = np.copy(labels_col_data)
-    for i, e in enumerate(labels_col_copy):
-        # we don't want to remove null values since we need to know they're there in order to delete the whole row
-        # of data within get_data. Any null values we want to have removed (like on_3b, on_2b, on_1b) are done in
-        # get_data using np.where
-        if e != "null" and e not in labels_dict:
-            # woba array will only fill with the number of possible outcomes (19)
-            woba_array[counter] = float(woba_column[i])
 
-            labels_dict[e] = counter
-            labels_col_data = np.where(labels_col_data == e, counter, labels_col_data)
-            counter += 1
+    if all_cat:
+        labels_col_copy = np.copy(labels_col_data)
+        for i, e in enumerate(labels_col_data):
+            # we don't want to remove null values since we need to know they're there in order to delete the whole row
+            # of data within get_data. Any null values we want to have removed (like on_3b, on_2b, on_1b) are done in
+            # get_data using np.where
+            if e != "null" and e not in labels_dict:
+                # woba array will only fill with the number of possible outcomes (19)
+                woba_array[counter] = float(woba_column[i])
 
-    return labels_col_data, labels_dict, woba_array
+                labels_dict[e] = counter
+                labels_col_copy = np.where(labels_col_copy == e, counter, labels_col_copy)
+                counter += 1
+    else:
+        labels_col_copy = np.copy(woba_column)
+        for i, e in enumerate(woba_column):
+            # we don't want to remove null values since we need to know they're there in order to delete the whole row
+            # of data within get_data. Any null values we want to have removed (like on_3b, on_2b, on_1b) are done in
+            # get_data using np.where
+            if e != "null" and e not in labels_dict:
+                # woba array will only fill with the number of possible outcomes (19)
+                woba_array[counter] = float(woba_column[i])
+
+                labels_dict[e] = counter
+                labels_col_copy = np.where(labels_col_copy == e, counter, labels_col_copy)
+                counter += 1
+
+    return labels_col_copy, labels_dict, woba_array
