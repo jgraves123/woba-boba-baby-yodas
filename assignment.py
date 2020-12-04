@@ -252,6 +252,24 @@ def test_value(model, input):
     pred, fake = model.accuracy(probs, np.array([[0, 0]]))
     return probs, pred
 
+def test_basic(inputs, labels, index_dict, batter_woba, pitcher_woba):
+    # ((batter_woba + pitcher_woba)/2) + .5 balls - .65 strikes
+    wobas = []
+    for i in inputs:
+        bat_pit = (batter_woba[i[index_dict['batter']]]+pitcher_woba[i[index_dict['player_name']]])/2
+        woba = bat_pit + .5*i[index_dict['balls']] - 0.65*i[index_dict['strikes']]
+        wobas.append(woba)
+
+    slope, intercept, r_value, p_value, std_err = stats.linregress(labels[:, 0], wobas)
+    print("basic results")
+    print("r-value: ", r_value)
+    print("r-squared: ", r_value ** 2)
+    print("p-value: ", p_value)
+
+    pass
+
+
+
 
 def create_test(pitcher_dict, batter_dict, team_dict, pitcher, batter, team, strikes, balls, shift):
     """
@@ -285,7 +303,7 @@ def create_test(pitcher_dict, batter_dict, team_dict, pitcher, batter, team, str
 # where the magic happens
 def main():
     train_data, test_data, train_labels, test_labels, labels_dictionary, woba_array, index_dict, max_dict, \
-        pitcher_dict, batter_dict, team_dict = get_data("full_2020_data.csv", False)
+        pitcher_dict, batter_dict, team_dict, batter_woba, pitcher_woba = get_data("full_2020_data.csv", False)
     model = Model(index_dict, max_dict, labels_dictionary, woba_array, False)
     print("Model initialized...")
 
@@ -296,6 +314,8 @@ def main():
         train_data = tf.gather(train_data, sorting)
         train_labels = tf.gather(train_labels, sorting)
         acc = test(model, test_data, test_labels)
+
+    test_basic(test_data, test_labels, index_dict, batter_woba, pitcher_woba)
 
     # print("Model testing finished...")
     # acc = test(model, test_data, test_labels)

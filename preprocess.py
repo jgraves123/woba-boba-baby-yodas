@@ -30,10 +30,12 @@ def get_data(data_file, all_cat):
 
     print("Done creating columns...")
 
+    data_dict['woba_value'] = data_dict['woba_value'].astype(float)
+
     # build IDs maps string data in certain columns to IDs using build_ids function
     data_dict['pitch_type'] = build_ids(data_dict['pitch_type'])
-    data_dict['batter'], batter_dict = build_ids_dict(data_dict['batter'])
-    data_dict['player_name'], pitcher_dict = build_ids_dict(data_dict['player_name'])
+    data_dict['batter'], batter_dict, batter_woba = batter_pitcher_woba(data_dict['batter'], data_dict['woba_value'])
+    data_dict['player_name'], pitcher_dict, pitcher_woba = batter_pitcher_woba(data_dict['player_name'], data_dict['woba_value'])
     data_dict['if_fielding_alignment'] = build_ids(data_dict['if_fielding_alignment'])
     data_dict['of_fielding_alignment'] = build_ids(data_dict['of_fielding_alignment'])
     
@@ -119,12 +121,16 @@ def get_data(data_file, all_cat):
     labels_training = shuffled_labels[0:int(shuffled_labels.shape[0]*0.9), :]
     labels_testing = shuffled_labels[int(shuffled_labels.shape[0]*0.9):, :]
 
+    batter_woba = woba_for_player(data_training, labels_training, index_dict['batter'])
+    pitcher_woba = woba_for_player(data_training, labels_training, index_dict['player_name'])
+
+
 # TODO delete labels_dict
 
     print("Done splitting data into training/testing with 90/10 split...")
     print("Done preprocessing!")
     return data_training, data_testing, labels_training, labels_testing, labels_dictionary, woba_array, \
-        index_dict, max_dict, pitcher_dict, batter_dict, team_dict
+        index_dict, max_dict, pitcher_dict, batter_dict, team_dict, batter_woba, pitcher_woba
 
 
 def build_ids(column_data):
@@ -181,6 +187,41 @@ def build_ids_dict(labels_col_data):
             labels_col_data = np.where(labels_col_data == option, counter, labels_col_data)
             counter += 1
     return labels_col_data, labels_dict
+
+
+def batter_pitcher_woba(labels_col_data, woba_col):
+    """
+        Takes in a column of labels that has the different types of events that can happen as a form of string names
+        :param labels_col_data: data_dict[key], a column of the data_dict used in get_data
+        :return: Column of data now represented as ints instead of strings, and the dictionary mapping string to the number
+        """
+    # find all the unique string values within the column
+    avg_woba_dict = {}
+    labels_dict = {}
+    unique_values_list = np.unique(labels_col_data)
+    counter = 0
+    for option in unique_values_list:
+        # we don't want to remove null values since we need to know they're there in order to delete the whole row
+        # of data within get_data. Any null values we want to have removed (like on_3b, on_2b, on_1b) are done in
+        # get_data using np.where
+        if option != "null":
+            labels_dict[option] = counter
+            # associate value with an int
+            player_values = woba_col[np.where(labels_col_data == option)]
+            avg_woba_dict[counter] = np.mean(player_values)
+            labels_col_data = np.where(labels_col_data == option, counter, labels_col_data)
+            counter += 1
+    return labels_col_data, labels_dict, avg_woba_dict
+
+
+def woba_for_player(train_data, train_labels, index):
+    avg_woba_dict = {}
+    unique_values_list = np.unique(train_data[:, index])
+    for option in unique_values_list:
+        player_values = train_labels[:, 0][np.where(train_data[:, index] == option)]
+        avg_woba_dict[option] = np.mean(player_values)
+    return avg_woba_dict
+
 
 
 def build_labels(labels_col_data, woba_column, all_cat):
