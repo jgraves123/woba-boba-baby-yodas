@@ -1,5 +1,6 @@
 import numpy as np
 import csv
+from collections import defaultdict
 
 
 def get_data(data_file, all_cat):
@@ -215,7 +216,7 @@ def batter_pitcher_woba(labels_col_data, woba_col):
 
 
 def woba_for_player(train_data, train_labels, index):
-    avg_woba_dict = {}
+    avg_woba_dict = defaultdict(lambda: 0.333)
     unique_values_list = np.unique(train_data[:, index])
     for option in unique_values_list:
         player_values = train_labels[:, 0][np.where(train_data[:, index] == option)]

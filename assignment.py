@@ -2,6 +2,7 @@ import tensorflow as tf
 from preprocess import *
 from scipy import stats
 import tensorflow_addons as tfa
+import math
 
 
 """
@@ -46,10 +47,10 @@ class Model(tf.keras.Model):
         self.num_of_alignments = max_dict['of_fielding_alignment']
 
         # arbitrary hyperparameters - can be adjusted to improve model performance as needed 
-        self.embedding_size = 100
-        self.batch_size = 1000
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-        self.dense_hidden_layer_size = 100
+        self.embedding_size = 50
+        self.batch_size = 100
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.0005)
+        self.dense_hidden_layer_size = 50
 
         # embedding lookups for batter, pitcher, and team IDs  
         self.E_batter = tf.Variable(
@@ -57,7 +58,7 @@ class Model(tf.keras.Model):
         self.E_pitcher = tf.Variable(
             tf.random.truncated_normal([self.num_pitchers, self.embedding_size], stddev=.1, dtype=tf.float32))
         self.E_team = tf.Variable(
-            tf.random.truncated_normal([self.num_teams, self.embedding_size], stddev=.1, dtype=tf.float32))
+            tf.random.truncated_normal([self.num_teams, math.floor(self.embedding_size/2)], stddev=.1, dtype=tf.float32))
 
         # initializing two dense layers
         self.denseLayer0 = tf.keras.layers.Dense(self.dense_hidden_layer_size, activation="relu")
@@ -126,6 +127,9 @@ class Model(tf.keras.Model):
         out1 = self.denseLayer1(out0)
         probs = self.denseLayer2(out1)
 
+        # out0 = self.denseLayer1(new_input)
+        # probs = self.denseLayer2(out0)
+
         # return probabilities
         return probs
 
@@ -155,7 +159,7 @@ class Model(tf.keras.Model):
             count = 19
         else:
             count = 6
-        return tf.reduce_sum(loss(tf.one_hot(new_labels, count), probs))
+        return tf.reduce_mean(loss(tf.one_hot(new_labels, count), probs))
 
     def accuracy(self, probs, labels):
         """
@@ -307,7 +311,7 @@ def main():
     model = Model(index_dict, max_dict, labels_dictionary, woba_array, False)
     print("Model initialized...")
 
-    for j in range(4):
+    for j in range(5):
         val = train(model, train_data, train_labels)
         print('Epoch:', j, 'average loss:', val)
         sorting = tf.random.shuffle(range(np.size(train_labels, 0)))
