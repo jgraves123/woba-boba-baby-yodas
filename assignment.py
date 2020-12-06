@@ -5,19 +5,10 @@ import tensorflow_addons as tfa
 import math
 
 
-"""
-Training our model:
-The model seems to be getting general trends correct but we are running into two problems that seem to be contradictory:
-1) The results have a ton of varience. Each time we run it the predicted outcomes for a given state vary wildly
-2) The model seems to do worse when you increase the number of epochs -> probably due to overfitting?
-Questions:
-Are there certain things we could do that consider both of these difficulties? A normal response to high varience would 
-seem to be to increase the number of epochs but that doesn't seem to work here.
-"""
 
 
 class Model(tf.keras.Model):
-    def __init__(self, index_dict, max_dict, labels_dict, woba_array, all_cat=True):
+    def __init__(self, index_dict, max_dict, woba_array, all_cat=True):
         """
         The Model class predicts the wOBA value of a given hitting/pitching/fielding setup combination.
         """
@@ -26,7 +17,6 @@ class Model(tf.keras.Model):
         # these are our input dictionaries with our data
         self.index_dict = index_dict
         self.max_dict = max_dict
-        self.labels_dict = labels_dict
         self.all_cat = all_cat
 
         # since some of the outputs are the same woba value (ex. strikeout vs fly out both have a woba of 0), not
@@ -49,7 +39,7 @@ class Model(tf.keras.Model):
         # arbitrary hyperparameters - can be adjusted to improve model performance as needed 
         self.embedding_size = 50
         self.batch_size = 100
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.0005)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
         self.dense_hidden_layer_size = 50
 
         # embedding lookups for batter, pitcher, and team IDs  
@@ -127,12 +117,10 @@ class Model(tf.keras.Model):
         out1 = self.denseLayer1(out0)
         probs = self.denseLayer2(out1)
 
-        # out0 = self.denseLayer1(new_input)
-        # probs = self.denseLayer2(out0)
-
         # return probabilities
         return probs
 
+    # Note, we tested this but no longer use it
     def loss_mean_square(self, probs, labels):
         """
         Calculates average loss of the prediction
@@ -140,31 +128,31 @@ class Model(tf.keras.Model):
         :param labels: correct play outcomes
         :return: the mean squared error loss of the model as a tensor of size 1
         """
+        # Get expected woba value
         probs_value = self.woba_calc(probs)
         real_woba = tf.convert_to_tensor(labels[:, 0])
+
+        # calculate mean squared error between real and model expected woba value
         loss = tf.reduce_mean(tf.square(probs_value - real_woba))*100
         return loss
 
-    # TODO: delete when we confirm we don't need this anymore
     def loss_event(self, probs, labels):
         """
         Calculates average loss of the prediction
-        :param probs: proabilities from our model.call function for play outcomes
+        :param probs: probabilities from our model.call function for play outcomes
         :param labels: correct play outcomes
         :return: the cross entropy loss of the model as a tensor of size 1
         """
         new_labels = tf.cast(labels[:, 1], dtype=tf.int32)
         loss = tfa.losses.SigmoidFocalCrossEntropy()
-        if self.all_cat:
-            count = 19
-        else:
-            count = 6
-        return tf.reduce_mean(loss(tf.one_hot(new_labels, count), probs))
+
+        # Finds Focal loss between one-hotted labels and predicted probabilities
+        return tf.reduce_mean(loss(tf.one_hot(new_labels, self.num_possible_events), probs))
 
     def accuracy(self, probs, labels):
         """
         Calculates average loss of the prediction
-        :param probs: probabilities of outcomes at each index, batch size x 19
+        :param probs: probabilities of outcomes at each index, batch size x Num_possible-events
         :param labels: correct labels for the event outcome of the play
         :return: the woba value our model predicts, the actual woba value
         """
@@ -175,7 +163,7 @@ class Model(tf.keras.Model):
     def woba_calc(self, probs):
         """
         Calculates woba given a probability of each outcome
-        :param probs: probabilities of outcomes at each index, batch size x 19
+        :param probs: probabilities of outcomes at each index, batch size x Num_possible-events
         :return: 1D array of woba values
         """
         return tf.reduce_sum(probs * self.woba_value, axis=1)
@@ -235,6 +223,7 @@ def test(model, test_inputs, test_labels):
         all_pred = np.concatenate([all_pred, np.array(pred)])
         all_true = np.concatenate([all_true, np.array(true)])
 
+    # Calculates r-squared and p-value of our model on test data
     slope, intercept, r_value, p_value, std_err = stats.linregress(all_true, all_pred)
     print("r-value: ", r_value)
     print("r-squared: ", r_value ** 2)
@@ -247,7 +236,7 @@ def test(model, test_inputs, test_labels):
 
 def test_value(model, input):
     """
-    Gets model's predicted woba and play outcome, used for testing in main()
+    Gets model's predicted woba and play outcome, for specific input value
     :param model: the trained model to use for prediction
     :param input: play data for a single event
     :returns: probabilities of play outcomes from the model, predicted woba score of the model
@@ -257,20 +246,29 @@ def test_value(model, input):
     return probs, pred
 
 def test_basic(inputs, labels, index_dict, batter_woba, pitcher_woba):
-    # ((batter_woba + pitcher_woba)/2) + .5 balls - .65 strikes
+    """
+    Creates simple regression model to compare our deep learning model against
+    :param inputs: all test inputs
+    :param labels: all test labels
+    :param index_dict: dictionary from category to column index in inputs
+    :param batter_woba: dictionary between batter ID and their average woba in train dataset
+    :param pitcher_woba: dictionary between pitcher ID and their average woba in train dataset
+    :return:
+    """
     wobas = []
+
+    # for each test input calculates expected woba value based on batter, pitcher, balls and strikes
     for i in inputs:
         bat_pit = (batter_woba[i[index_dict['batter']]]+pitcher_woba[i[index_dict['player_name']]])/2
         woba = bat_pit + .5*i[index_dict['balls']] - 0.65*i[index_dict['strikes']]
         wobas.append(woba)
 
+    #Calculates r-squared and p-value for basic model
     slope, intercept, r_value, p_value, std_err = stats.linregress(labels[:, 0], wobas)
     print("basic results")
     print("r-value: ", r_value)
     print("r-squared: ", r_value ** 2)
     print("p-value: ", p_value)
-
-    pass
 
 
 
@@ -306,29 +304,46 @@ def create_test(pitcher_dict, batter_dict, team_dict, pitcher, batter, team, str
 
 # where the magic happens
 def main():
-    train_data, test_data, train_labels, test_labels, labels_dictionary, woba_array, index_dict, max_dict, \
+    train_data, test_data, train_labels, test_labels, woba_array, index_dict, max_dict, \
         pitcher_dict, batter_dict, team_dict, batter_woba, pitcher_woba = get_data("full_2020_data.csv", False)
-    model = Model(index_dict, max_dict, labels_dictionary, woba_array, False)
+    model = Model(index_dict, max_dict, woba_array, False)
     print("Model initialized...")
 
-    for j in range(5):
+    for j in range(3):
         val = train(model, train_data, train_labels)
         print('Epoch:', j, 'average loss:', val)
         sorting = tf.random.shuffle(range(np.size(train_labels, 0)))
         train_data = tf.gather(train_data, sorting)
         train_labels = tf.gather(train_labels, sorting)
-        acc = test(model, test_data, test_labels)
 
+    # Tests basic regression function for comparison
     test_basic(test_data, test_labels, index_dict, batter_woba, pitcher_woba)
 
-    # print("Model testing finished...")
-    # acc = test(model, test_data, test_labels)
-    # print("Model accuracy: ", acc)
+    print("Model testing finished...")
+    acc = test(model, test_data, test_labels)
+    print("Model accuracy: ", acc)
 
-    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 0, 0, 0)
-    # print("Springer v. Bieber")
-    # probs, pred = test_value(model, value)
-    # print("predicted wOBA: ", pred)
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 0, 0, 0)
+    print("Springer v. Bieber")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '666176', 'CLE', 0, 0, 0)
+    print("Adell v. Bieber")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '543807', 'NYM', 0, 0, 0)
+    print("Springer v. Porcello")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '666176', 'NYM', 0, 0, 0)
+    print("Adell v. Porcello")
+    probs, pred = test_value(model, value)
+    print("predicted wOBA: ", pred)
+
+    # Other testing scenarios we ran
     #
     # value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '543807', 'CLE', 2, 0, 0)
     # print("Springer v. Bieber w/ 2 strikes")
@@ -340,20 +355,6 @@ def main():
     # probs, pred = test_value(model, value)
     # print("predicted wOBA: ", pred)
     #
-    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Shane Bieber', '666176', 'CLE', 0, 0, 0)
-    # print("Adell v. Bieber")
-    # probs, pred = test_value(model, value)
-    # print("predicted wOBA: ", pred)
-    #
-    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '543807', 'NYM', 0, 0, 0)
-    # print("Springer v. Porcello")
-    # probs, pred = test_value(model, value)
-    # print("predicted wOBA: ", pred)
-    #
-    # value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '666176', 'NYM', 0, 0, 0)
-    # print("Adell v. Porcello")
-    # probs, pred = test_value(model, value)
-    # print("predicted wOBA: ", pred)
     #
     # value = create_test(pitcher_dict, batter_dict, team_dict, 'Rick Porcello', '518934', 'NYM', 0, 0, 0)
     # print("Leimahiu v. Porcello no shift")
